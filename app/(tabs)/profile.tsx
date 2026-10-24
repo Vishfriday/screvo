@@ -28,8 +28,10 @@ export default function Profile() {
   const [lang, setLang] = useState("English (US)");
   const [rate, setRate] = useState(1);
   const [brandColor, setBrandColor] = useState("#5B5FD1");
-  const [dark, setDark] = useState(true);
-  const [reduceMotion, setReduceMotion] = useState(false);
+  const reduceMotion = useStore((s) => s.reduceMotion);
+  const setReduceMotion = useStore((s) => s.setReduceMotion);
+  const defaultAspect = useStore((s) => s.defaultAspect);
+  const setDefaultAspect = useStore((s) => s.setDefaultAspect);
 
   const videosCreated = projects.length + 11;
   const sopsCreated = projects.filter((p) => /sop|onboard/i.test(p.name)).length + 4;
@@ -235,10 +237,18 @@ export default function Profile() {
       </Sheet>
 
       <Sheet open={sheet === "settings"} onClose={() => setSheet(null)} title="Settings">
-        <Toggle label="Dark interface" checked={dark} onChange={setDark} hint="Screvo is designed dark-first" />
-        <Toggle label="Reduce motion" checked={reduceMotion} onChange={setReduceMotion} hint="Fewer animations across the app" />
+        <Toggle
+          label="Reduce motion"
+          checked={reduceMotion}
+          onChange={setReduceMotion}
+          hint="Skips the ripples, pulses and eased pushes in the preview"
+        />
         <FieldSub>Default export preset</FieldSub>
-        <Segmented value={"9:16" as string} onChange={() => {}} options={[{ value: "9:16", label: "9:16" }, { value: "1:1", label: "1:1" }, { value: "16:9", label: "16:9" }]} />
+        <Segmented
+          value={defaultAspect}
+          onChange={(v) => setDefaultAspect(v as "9:16" | "1:1" | "16:9")}
+          options={[{ value: "9:16", label: "9:16" }, { value: "1:1", label: "1:1" }, { value: "16:9", label: "16:9" }]}
+        />
       </Sheet>
 
       <Sheet open={sheet === "subscription"} onClose={() => setSheet(null)} title="Subscription" subtitle="Pro plan">

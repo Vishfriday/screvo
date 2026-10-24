@@ -126,7 +126,7 @@ function subPosition(orientation: string, position: string) {
   return { leftPct: 0.5, topPct: map[position] ?? 0.84, vertical: false };
 }
 
-function TouchFx({ fx, W, H }: { fx: Effect; W: number; H: number }) {
+function TouchFx({ fx, W, H, still }: { fx: Effect; W: number; H: number; still?: boolean }) {
   const style = fx.params.style || "Ripple";
   const color = fx.params.color || "#3FD1CC";
   const size = fx.params.size || 60;
@@ -169,8 +169,12 @@ function TouchFx({ fx, W, H }: { fx: Effect; W: number; H: number }) {
   if (style === "Pulse") {
     return (
       <View pointerEvents="none" style={base}>
-        <PulseRing size={size} color={color} />
-        <PulseRing size={size} color={color} delay={600} />
+        {!still && (
+          <>
+            <PulseRing size={size} color={color} />
+            <PulseRing size={size} color={color} delay={600} />
+          </>
+        )}
         <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: color }} />
       </View>
     );
@@ -178,7 +182,7 @@ function TouchFx({ fx, W, H }: { fx: Effect; W: number; H: number }) {
   // Ripple
   return (
     <View pointerEvents="none" style={base}>
-      <RippleOnce size={size} color={color} />
+      {!still && <RippleOnce size={size} color={color} />}
       <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: color }} />
     </View>
   );
@@ -206,6 +210,7 @@ export function VideoStage({
   style?: any;
 }) {
   const [box, setBox] = useState({ w: 0, h: 0 });
+  const reduceMotion = useStore((s) => s.reduceMotion);
   const t = playhead;
 
   const currentClip = useMemo(
@@ -227,6 +232,54 @@ export function VideoStage({
 
   const zoom = activeAt(project.effects.filter((e) => e.type === "zoom"), t)[0];
   const transitions = activeAt(project.effects.filter((e) => e.type === "transition"), t);
+  const parallaxFx = activeAt(project.effects.filter((e) => e.type === "parallax"), t)[0];
+  const animFx = activeAt(project.effects.filter((e) => e.type === "animation"), t)[0];
+
+  // Parallax drifts the footage across its own frame for the length of the
+  // effect; the direction and how far come from the panel.
+  const parallax = (() => {
+    if (!parallaxFx) return { x: 0, y: 0 };
+    const p = Math.max(0, Math.min(1, (t - parallaxFx.start) / Math.max(0.1, parallaxFx.duration)));
+    const depth = parallaxFx.params.depth ?? 0.5;
+    const intensity = parallaxFx.params.intensity ?? 0.5;
+    // a gentle ease either side of the middle rather than a linear slide.
+    // 60 as the base puts the default drift near 3% of the frame — small
+    // enough to read as depth, large enough that the panel visibly does
+    // something, which 26 did not.
+    const travel = Math.sin(p * Math.PI) * 60 * depth * (0.5 + intensity);
+    const back = /Background|Perspective/.test(parallaxFx.params.type ?? "");
+    const amount = back ? -travel : travel;
+    return parallaxFx.params.direction === "vertical" ? { x: 0, y: amount } : { x: amount, y: 0 };
+  })();
+
+  // An entrance or exit: the same shapes the Animations panel names, run
+  // forwards for "in" and backwards for "out".
+  const anim = (() => {
+    if (!animFx) return null;
+    const raw = Math.max(0, Math.min(1, (t - animFx.start) / Math.max(0.1, animFx.duration)));
+    const p = animFx.params.scope === "out" ? 1 - raw : raw;
+    const eased = 1 - Math.pow(1 - p, 3);
+    switch (animFx.params.anim) {
+      case "Slide":
+        return { opacity: eased, scale: 1, x: (1 - eased) * 90, y: 0 };
+      case "Zoom":
+        return { opacity: eased, scale: 0.7 + eased * 0.3, x: 0, y: 0 };
+      case "Bounce":
+        // overshoots just past full size before settling
+        return { opacity: eased, scale: 1 + Math.sin(p * Math.PI) * 0.12, x: 0, y: (1 - eased) * 40 };
+      case "Pop":
+        return { opacity: eased, scale: 0.86 + eased * 0.14 + Math.sin(p * Math.PI) * 0.06, x: 0, y: 0 };
+      case "Reveal":
+        return { opacity: eased, scale: 1, x: 0, y: (1 - eased) * -70 };
+      case "Spin":
+        return { opacity: eased, scale: 0.8 + eased * 0.2, x: 0, y: 0, rotate: (1 - eased) * 25 };
+      case "Kinetic":
+        return { opacity: eased, scale: 1, x: Math.sin(p * Math.PI * 2) * 18 * (1 - eased), y: 0 };
+      default: // Fade, Blur In — blur has no cheap equivalent, so it fades
+        return { opacity: eased, scale: 1, x: 0, y: 0 };
+    }
+  })();
+
   const touchFx = activeAt(project.effects.filter((e) => e.type === "touchpoint"), t);
   const ctas = activeAt(project.effects.filter((e) => e.type === "cta"), t);
   const texts = activeAt(project.effects.filter((e) => e.type === "text"), t);
@@ -258,7 +311,18 @@ export function VideoStage({
     const fy = zoom?.y ?? 0.5;
     const W = box.w || BASE_W;
     const H = box.h || BASE_H;
-    const cfg = { duration: !zoom || zoomKind === "in" ? 600 : 130, easing: Easing.out(Easing.cubic) };
+    // the panel offers an easing per zoom, and Reduce motion turns the push
+    // into a cut rather than a glide
+    const named: Record<string, any> = {
+      linear: Easing.linear,
+      easeIn: Easing.in(Easing.cubic),
+      easeInOut: Easing.inOut(Easing.cubic),
+      easeOut: Easing.out(Easing.cubic),
+    };
+    const cfg = {
+      duration: reduceMotion ? 0 : !zoom || zoomKind === "in" ? 600 : 130,
+      easing: named[(zoom?.params.easing as string) ?? "easeOut"] ?? Easing.out(Easing.cubic),
+    };
     s.value = withTiming(zoomScale, cfg);
     tx.value = withTiming((0.5 - fx) * W * (zoomScale - 1), cfg);
     ty.value = withTiming((0.5 - fy) * H * (zoomScale - 1), cfg);
@@ -283,7 +347,22 @@ export function VideoStage({
     >
       {/* frame */}
       <Animated.View style={[StyleSheet.absoluteFill, zoomStyle]}>
-        <View style={styles.cropHost}>
+        <View
+          style={[
+            styles.cropHost,
+            anim ? { opacity: anim.opacity } : null,
+            parallax.x || parallax.y || anim
+              ? {
+                  transform: [
+                    { translateX: parallax.x + (anim?.x ?? 0) },
+                    { translateY: parallax.y + (anim?.y ?? 0) },
+                    ...(anim?.rotate ? [{ rotate: `${anim.rotate}deg` }] : []),
+                    ...(anim && anim.scale !== 1 ? [{ scale: anim.scale }] : []),
+                  ],
+                }
+              : null,
+          ]}
+        >
           <View
             style={[
               // a band keeps its own shape and is centred by the host; fill and
@@ -363,17 +442,17 @@ export function VideoStage({
         />
       ))}
 
-      {/* live touch ripples */}
+      {/* live touch ripples — the dot stays, the ripple goes under Reduce motion */}
       {liveTouches.map((tp) => (
         <View key={tp.id} pointerEvents="none" style={{ position: "absolute", left: tp.x * box.w, top: tp.y * box.h, alignItems: "center", justifyContent: "center" }}>
-          <RippleOnce size={48} color="#3FD1CC" />
+          {!reduceMotion && <RippleOnce size={48} color="#3FD1CC" />}
           <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: "#3FD1CC" }} />
         </View>
       ))}
 
       {/* touchpoint effects */}
       {touchFx.map((fx) => (
-        <TouchFx key={fx.id} fx={fx} W={box.w} H={box.h} />
+        <TouchFx key={fx.id} fx={fx} W={box.w} H={box.h} still={reduceMotion} />
       ))}
 
       {/* text overlays */}

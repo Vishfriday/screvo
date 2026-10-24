@@ -138,6 +138,12 @@ interface StoreState {
   /** the resolution Screvo's own recorder aims for, kept across sessions */
   captureQuality: QualityId;
   setCaptureQuality: (q: QualityId) => void;
+  /** skips the decorative motion — ripples, pulses, eased pushes */
+  reduceMotion: boolean;
+  setReduceMotion: (v: boolean) => void;
+  /** the aspect the export screen starts on */
+  defaultAspect: "9:16" | "1:1" | "16:9";
+  setDefaultAspect: (a: "9:16" | "1:1" | "16:9") => void;
   /** replaces the canned result with one Claude derived from the real footage */
   applyRealAnalysis: (id: string, result: AnalysisResult, transcript: TranscriptSegment[]) => void;
   /** assembles the product-demo cut: only the beats Claude chose, in order */
@@ -651,6 +657,12 @@ export const useStore = create<StoreState>()(
 
         captureQuality: DEFAULT_QUALITY,
         setCaptureQuality: (q) => set({ captureQuality: q }),
+
+        reduceMotion: false,
+        setReduceMotion: (v) => set({ reduceMotion: v }),
+
+        defaultAspect: "9:16",
+        setDefaultAspect: (a) => set({ defaultAspect: a }),
 
         createProject: (partial) => {
           const id = partial.id ?? uid("proj");
@@ -1396,7 +1408,13 @@ export const useStore = create<StoreState>()(
     {
       name: "screvo-store-v1",
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (s) => ({ projects: s.projects, keys: s.keys, captureQuality: s.captureQuality }),
+      partialize: (s) => ({
+        projects: s.projects,
+        keys: s.keys,
+        captureQuality: s.captureQuality,
+        reduceMotion: s.reduceMotion,
+        defaultAspect: s.defaultAspect,
+      }),
       onRehydrateStorage: () => (state) => {
         if (state) state.hydrated = true;
       },

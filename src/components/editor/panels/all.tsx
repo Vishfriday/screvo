@@ -4,7 +4,7 @@ import { Minus, Plus, Trash2, Wand2, Palette, Check, X, Sparkles, AudioLines, Vo
 import { synthesizeSpeech, playClip, clipDuration, KOKORO_DEFAULT_ENDPOINT } from "@/lib/voice/tts";
 import { estimateSpeechSeconds } from "@/lib/script";
 import { voicesOf, genderOf, swapGender, blurbFor, type VoiceGender } from "@/lib/voice/voices";
-import { useStore } from "@/store/useStore";
+import { useStore, defaultAudio } from "@/store/useStore";
 import { Slider, ChipGroup, Segmented, Toggle, ColorRow } from "@/components/ui/Controls";
 import { PanelSection, AddButton, EffectList, PlaceOnVideoToggle, ClipPicker, EmptyNote } from "./common";
 import { generateRecommendations, generateSubtitlesFromScript, transcribeToSubtitles, rewriteScript, type ScriptMode } from "@/lib/opus";
@@ -127,12 +127,13 @@ export function TrimPanel() {
 
 // ---------------- SPEED ----------------
 export function SpeedPanel() {
-  const { editing, setProjectSpeed, setClipSpeed, toast } = useStore();
+  const { editing, setProjectSpeed } = useStore();
   const p = editing();
-  const { id, setId, clip } = useDefaultClip(["video"]);
-  const [scope, setScope] = useState<"video" | "clip">("video");
   if (!p) return <EmptyNote>No project open.</EmptyNote>;
 
+  // Whole-video only. A per-clip speed used to be offered here, but nothing
+  // played or exported it — the clip simply got shorter on the timeline while
+  // the video ran at its original pace.
   const speed = projectSpeed(p);
   const finished = finishedDuration(p);
   const overrun = narrationOverrun(p);
@@ -140,108 +141,54 @@ export function SpeedPanel() {
 
   return (
     <View>
-      <PanelSection title="Applies to">
-        <Segmented
-          value={scope}
-          onChange={(v) => setScope(v as any)}
-          options={[
-            { value: "video", label: "Whole video" },
-            { value: "clip", label: "One clip" },
-          ]}
+      <PanelSection title="Preset">
+        <ChipGroup
+          columns={4}
+          value={fmtSpeed(speed)}
+          onChange={(v) => setProjectSpeed(parseFloat(v))}
+          items={SPEEDS.map(fmtSpeed)}
         />
       </PanelSection>
+      <Slider
+        label="Playback speed"
+        min={0.5}
+        max={5}
+        step={0.1}
+        value={speed}
+        onChange={(v) => setProjectSpeed(Number(v.toFixed(1)))}
+        format={(v) => `${v.toFixed(1)}×`}
+      />
+      <View style={styles.readout}>
+        <Text style={styles.readoutKick}>FINISHED LENGTH</Text>
+        <Text style={styles.readoutBig}>{fmtTime(finished)}</Text>
+        <Text style={styles.readoutSub}>
+          {fmtTime(p.durationSec)} of footage at {fmtSpeed(speed)}
+        </Text>
+      </View>
 
-      {scope === "video" ? (
-        <>
-          <PanelSection title="Preset">
-            <ChipGroup
-              columns={4}
-              value={fmtSpeed(speed)}
-              onChange={(v) => setProjectSpeed(parseFloat(v))}
-              items={SPEEDS.map(fmtSpeed)}
-            />
-          </PanelSection>
-          <Slider
-            label="Playback speed"
-            min={0.5}
-            max={5}
-            step={0.1}
-            value={speed}
-            onChange={(v) => setProjectSpeed(Number(v.toFixed(1)))}
-            format={(v) => `${v.toFixed(1)}×`}
-          />
-          <View style={styles.readout}>
-            <Text style={styles.readoutKick}>FINISHED LENGTH</Text>
-            <Text style={styles.readoutBig}>{fmtTime(finished)}</Text>
-            <Text style={styles.readoutSub}>
-              {fmtTime(p.durationSec)} of footage at {fmtSpeed(speed)}
-            </Text>
-          </View>
+      {speed !== 1 && (
+        <View style={styles.note}>
+          <Text style={{ color: colors.ink400, fontSize: 11, lineHeight: 16 }}>
+            The recording's own sound is dropped above 1× — sped-up audio is unusable, and the
+            export writes the narration track instead.
+          </Text>
+        </View>
+      )}
 
-          {speed !== 1 && (
-            <View style={styles.note}>
-              <Text style={{ color: colors.ink400, fontSize: 11, lineHeight: 16 }}>
-                The recording's own sound is dropped above 1× — sped-up audio is unusable, and the
-                export writes the narration track instead.
-              </Text>
-            </View>
-          )}
+      {voiced > 0 && overrun.overlapping > 0 && (
+        <View style={[styles.note, { backgroundColor: "rgba(253,157,67,0.1)" }]}>
+          <Text style={{ color: colors.amber, fontSize: 11, lineHeight: 16 }}>
+            Narration keeps its natural pace, so {overrun.overlapping}{" "}
+            {overrun.overlapping === 1 ? "line runs" : "lines run"} into the next by up to{" "}
+            {overrun.worstSec.toFixed(1)}s at this speed. Shorten those lines, or drop back a step.
+          </Text>
+        </View>
+      )}
 
-          {voiced > 0 && overrun.overlapping > 0 && (
-            <View style={[styles.note, { backgroundColor: "rgba(253,157,67,0.1)" }]}>
-              <Text style={{ color: colors.amber, fontSize: 11, lineHeight: 16 }}>
-                Narration keeps its natural pace, so {overrun.overlapping}{" "}
-                {overrun.overlapping === 1 ? "line runs" : "lines run"} into the next by up to{" "}
-                {overrun.worstSec.toFixed(1)}s at this speed. Shorten those lines, or drop back a step.
-              </Text>
-            </View>
-          )}
-
-          {speed !== 1 && (
-            <Pressable onPress={() => setProjectSpeed(1)} style={styles.wideBtn}>
-              <Text style={{ color: colors.ink200, fontSize: 12, fontWeight: "700" }}>Back to 1×</Text>
-            </Pressable>
-          )}
-        </>
-      ) : !clip ? (
-        <EmptyNote>No video clips.</EmptyNote>
-      ) : (
-        <>
-          <PanelSection title="Clip">
-            <ClipPicker tracks={["video"]} value={id} onChange={setId} />
-          </PanelSection>
-          <PanelSection title="Preset">
-            <ChipGroup
-              columns={4}
-              value={fmtSpeed(clip.speed ?? 1)}
-              onChange={(v) => setClipSpeed(clip.id, parseFloat(v))}
-              items={SPEEDS.map(fmtSpeed)}
-            />
-          </PanelSection>
-          <Slider
-            label="Clip speed"
-            min={0.5}
-            max={5}
-            step={0.1}
-            value={clip.speed ?? 1}
-            onChange={(v) => setClipSpeed(clip.id, Number(v.toFixed(1)))}
-            format={(v) => `${v.toFixed(1)}×`}
-          />
-          <View style={styles.note}>
-            <Text style={{ color: colors.ink400, fontSize: 11 }}>
-              New clip length: <Text style={{ color: "#fff", fontWeight: "800" }}>{fmtTime(clip.duration)}</Text>
-            </Text>
-          </View>
-          <Pressable
-            onPress={() => {
-              setClipSpeed(clip.id, 1);
-              toast("Clip back to 1×");
-            }}
-            style={styles.wideBtn}
-          >
-            <Text style={{ color: colors.ink200, fontSize: 12, fontWeight: "700" }}>Reset this clip</Text>
-          </Pressable>
-        </>
+      {speed !== 1 && (
+        <Pressable onPress={() => setProjectSpeed(1)} style={styles.wideBtn}>
+          <Text style={{ color: colors.ink200, fontSize: 12, fontWeight: "700" }}>Back to 1×</Text>
+        </Pressable>
       )}
     </View>
   );
@@ -249,20 +196,81 @@ export function SpeedPanel() {
 
 // ---------------- VOLUME ----------------
 export function VolumePanel() {
-  const { setClipVolume } = useStore();
-  const { id, setId, clip } = useDefaultClip(["video", "audio"]);
-  if (!clip) return <EmptyNote>No clips.</EmptyNote>;
-  const vol = clip.volume ?? 1;
+  const { editing, setAudio, setVoice, updateMusic, toast } = useStore();
+  const p = editing();
+  if (!p) return <EmptyNote>No project open.</EmptyNote>;
+
+  // A mixer over the three things the finished video actually carries. It used
+  // to set a per-clip volume that nothing read, so every control here moved a
+  // number and changed nothing you could hear.
+  const audio = { ...defaultAudio(), ...p.audio };
+  const voiced = p.script.some((seg) => seg.audioUri);
+  const voiceVol = p.voice.volume ?? 1;
+  const muted = !!p.voice.muted;
+
   return (
     <View>
-      <PanelSection title="Track">
-        <ClipPicker tracks={["video", "audio"]} value={id} onChange={setId} />
+      <PanelSection title="Narration">
+        {voiced ? (
+          <>
+            <Slider
+              label="Voice-over level"
+              min={0}
+              max={1}
+              value={voiceVol}
+              onChange={(v) => setVoice({ volume: Number(v.toFixed(2)) })}
+              format={(v) => `${Math.round(v * 100)}%`}
+              accent="#3FD1CC"
+            />
+            <Toggle label="Mute the voice-over" checked={muted} onChange={(m) => setVoice({ muted: m })} />
+          </>
+        ) : (
+          <EmptyNote>No voice-over generated yet — add one in Voice.</EmptyNote>
+        )}
       </PanelSection>
-      <Slider label="Volume" min={0} max={1} value={vol} onChange={(v) => setClipVolume(clip.id, v)} format={(v) => `${Math.round(v * 100)}%`} accent="#3FD1CC" />
-      <Toggle label="Mute this track" checked={vol === 0} onChange={(m) => setClipVolume(clip.id, m ? 0 : 1)} />
+
+      <PanelSection title="Recording's own sound">
+        <Slider
+          label="Level in the finished video"
+          min={0}
+          max={1}
+          value={audio.sourceVolume}
+          onChange={(v) => setAudio({ sourceVolume: Number(v.toFixed(2)) })}
+          format={(v) => (v === 0 ? "Off" : `${Math.round(v * 100)}%`)}
+        />
+      </PanelSection>
+
+      <PanelSection title="Music">
+        {p.music ? (
+          <Slider
+            label={p.music.name}
+            min={0}
+            max={1}
+            value={p.music.volume}
+            onChange={(v) => updateMusic({ volume: Number(v.toFixed(2)) })}
+            format={(v) => `${Math.round(v * 100)}%`}
+            accent="#FD9D43"
+          />
+        ) : (
+          <EmptyNote>No music bed — add one in Music.</EmptyNote>
+        )}
+      </PanelSection>
+
       <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
-        {([["Fade in", 0.15], ["Normal", 1], ["Duck", 0.35]] as const).map(([label, v]) => (
-          <Pressable key={label} onPress={() => setClipVolume(clip.id, v)} style={styles.thirdBtn}>
+        {([
+          ["Voice first", { src: 0.25, mus: 0.12 }],
+          ["Balanced", { src: 0.7, mus: 0.22 }],
+          ["Room only", { src: 1, mus: 0 }],
+        ] as const).map(([label, mix]) => (
+          <Pressable
+            key={label}
+            onPress={() => {
+              setAudio({ sourceVolume: mix.src });
+              if (p.music) updateMusic({ volume: mix.mus });
+              toast(`${label} mix applied`, "success");
+            }}
+            style={styles.thirdBtn}
+          >
             <Text style={{ color: colors.ink200, fontSize: 12, fontWeight: "700" }}>{label}</Text>
           </Pressable>
         ))}

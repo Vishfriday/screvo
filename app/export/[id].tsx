@@ -97,7 +97,8 @@ export default function ExportScreen() {
   };
 
   const [format, setFormat] = useState("vertical");
-  const [preset, setPreset] = useState<"9:16" | "1:1" | "16:9">("9:16");
+  const defaultAspect = useStore((s) => s.defaultAspect);
+  const [preset, setPreset] = useState<"9:16" | "1:1" | "16:9">(defaultAspect);
   const [opts, setOpts] = useState({ captions: true, branding: true, watermark: false, aiVoice: true, music: true, roomAudio: true, cta: true });
   const [phase, setPhase] = useState<"config" | "rendering" | "done" | "error">("config");
   const [progress, setProgress] = useState(0);

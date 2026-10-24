@@ -622,19 +622,14 @@ export function interpretCommand(raw: string, p: Project, s: Store): CommandPlan
   // --- clip speed
   const speedMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:x|×|times)/);
   if (speedMatch && /(speed|slow|fast|play|clip|set|x|×)/.test(text)) {
-    const speed = Math.min(4, Math.max(0.25, Number(speedMatch[1])));
+    const speed = Math.min(5, Math.max(0.5, Number(speedMatch[1])));
     return {
       ok: true,
-      summary: `set the clip speed to ${speed}×`,
-      steps: ["Find the clip under the playhead", `Retime to ${speed}×`, "Preview"],
-      run: (st) => {
-        const cur = st.editing()!;
-        const c =
-          cur.clips.find((x) => x.id === st.selectedClipId) ??
-          cur.clips.find((x) => x.track === "video" && at >= x.start && at < x.start + x.duration);
-        if (c) st.setClipSpeed(c.id, speed);
-        else st.toast("No clip under the playhead", "error");
-      },
+      summary: `play the video at ${speed}×`,
+      // speed is a whole-video setting: a per-clip one was never played back
+      // or exported, so asking for it here did nothing either
+      steps: [`Set playback to ${speed}×`, "Preview"],
+      run: (st) => st.setProjectSpeed(speed),
     };
   }
 
