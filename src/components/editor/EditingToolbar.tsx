@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import {
-  Scissors, Ruler, Trash2, CopyPlus, Gauge, Volume2, Crop, Type, Captions,
+  Scissors, Ruler, Trash2, Gauge, Volume2, Crop, Type, Captions,
   Sparkles, Wand2, ZoomIn, Layers, ArrowLeftRight, Fingerprint, Droplet, Bot,
   MousePointerClick, Shapes, BrainCircuit, MicVocal, Music, Clapperboard, Sparkle, Waves,
 } from "lucide-react-native";
@@ -12,7 +12,7 @@ import { colors } from "@/theme/tokens";
 
 export function EditingToolbar() {
   const router = useRouter();
-  const { openPanel, splitClipAtPlayhead, deleteClip, duplicateClip, selectedClipId, editing, playhead, toast, setStatus } = useStore();
+  const { openPanel, splitClipAtPlayhead, deleteClip, selectedClipId, editing, playhead, toast, setStatus } = useStore();
   const project = editing();
 
   const withClip = (fn: (id: string) => void, verb: string) => () => {
@@ -41,7 +41,6 @@ export function EditingToolbar() {
     { id: "split", label: "Split", Icon: Scissors, run: () => splitClipAtPlayhead(), accent: "#5B5FD1" },
     { id: "trim", label: "Trim", Icon: Ruler, run: () => openPanel("trim") },
     { id: "delete", label: "Delete", Icon: Trash2, run: withClip((id) => deleteClip(id), "delete") },
-    { id: "duplicate", label: "Duplicate", Icon: CopyPlus, run: withClip((id) => duplicateClip(id), "duplicate") },
     { id: "speed", label: "Speed", Icon: Gauge, run: () => openPanel("speed"), accent: "#FD9D43" },
     { id: "intro", label: "Intro", Icon: Clapperboard, run: () => openPanel("intro"), accent: "#EDBF1B" },
     { id: "music", label: "Music", Icon: Music, run: () => openPanel("music"), accent: "#3FD1CC" },

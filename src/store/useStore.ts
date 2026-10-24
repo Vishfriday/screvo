@@ -245,6 +245,43 @@ interface StoreState {
   revertAI: () => void;
 }
 
+/**
+ * Takes a stretch of timeline out of a project, for real.
+ *
+ * Every layer shifts back over the hole and, crucially, the span is recorded in
+ * `removed` — that list is what playback and the exporter read to skip the
+ * footage. An edit that only shortens a clip's bar changes the timeline picture
+ * and nothing else: the video still plays and still exports in full.
+ */
+function removeTimelineSpan(d: Project, s: number, e: number) {
+  const len = e - s;
+  if (len <= 0.01) return;
+  d.clips = cutSpan(d.clips, s, e);
+  d.effects = cutSpan(d.effects, s, e);
+  d.subtitles = cutSpan(d.subtitles, s, e);
+  d.touchpoints = d.touchpoints
+    .filter((tp) => tp.t < s || tp.t >= e)
+    .map((tp) => (tp.t >= e ? { ...tp, t: tp.t - len } : tp));
+  d.script = d.script
+    .filter((sg) => sg.start < s || sg.start >= e)
+    .map((sg) => (sg.start >= e ? { ...sg, start: sg.start - len } : sg));
+  d.chapters = d.chapters
+    .map((c) => {
+      const a = c.start;
+      const b = c.start + c.duration;
+      if (b <= s + 0.001) return c;
+      if (a >= e - 0.001) return { ...c, start: a - len };
+      const keep = Math.max(0, s - a) + Math.max(0, b - e);
+      return { ...c, start: Math.min(a, s), duration: Math.max(0.3, keep) };
+    })
+    .filter((c) => c.duration > 0.08);
+  d.durationSec = Math.max(0.5, d.durationSec - len);
+  const removed = (d.removed ?? []).map((r) => (r.at > s ? { ...r, at: Math.max(0, r.at - len) } : r));
+  removed.push({ at: s, len });
+  removed.sort((a, b) => a.at - b.at);
+  d.removed = removed;
+}
+
 const DEFAULT_PXPS = 46;
 
 /**
@@ -1083,25 +1120,37 @@ export const useStore = create<StoreState>()(
           get().toast("Split every video clip at chapter boundaries", "success");
         },
 
-        trimClip: (id, side, deltaSec) =>
-          commit("Trim clip", (d) => {
-            const c = d.clips.find((x) => x.id === id);
-            if (!c) return;
-            if (side === "start") {
-              const ns = Math.max(0, Math.min(c.start + c.duration - 0.3, c.start + deltaSec));
-              c.duration -= ns - c.start;
-              c.start = ns;
-            } else {
-              c.duration = Math.max(0.3, c.duration + deltaSec);
-            }
-          }),
+        trimClip: (id, side, deltaSec) => {
+          const p = get().editing();
+          const c = p?.clips.find((x) => x.id === id);
+          if (!c) return;
+          // Trimming in removes that footage; trimming out would have to invent
+          // some, so it only ever gives back what a previous trim took.
+          if (side === "start" && deltaSec > 0) {
+            const take = Math.min(deltaSec, c.duration - 0.3);
+            if (take <= 0.01) return;
+            commit("Trim clip", (d) => removeTimelineSpan(d, c.start, c.start + take));
+            get().seek(Math.max(0, c.start));
+          } else if (side === "end" && deltaSec < 0) {
+            const take = Math.min(-deltaSec, c.duration - 0.3);
+            if (take <= 0.01) return;
+            const from = c.start + c.duration - take;
+            commit("Trim clip", (d) => removeTimelineSpan(d, from, from + take));
+            get().seek(Math.max(0, from - 0.05));
+          } else {
+            get().toast("Trimming only removes footage — it cannot add it back", "error");
+          }
+        },
 
         deleteClip: (id) => {
-          commit("Delete clip", (d) => {
-            d.clips = d.clips.filter((x) => x.id !== id);
-          });
-          set({ selectedClipId: null });
-          get().toast("Clip deleted", "default");
+          const p = get().editing();
+          const c = p?.clips.find((x) => x.id === id);
+          if (!c) return;
+          const len = c.duration;
+          commit("Delete clip", (d) => removeTimelineSpan(d, c.start, c.start + c.duration));
+          set({ selectedClipId: null, lastCutAt: null });
+          get().seek(Math.max(0, c.start - 0.05));
+          get().toast(`Clip deleted — ${len.toFixed(1)}s removed`, "success");
         },
 
         duplicateClip: (id) => {

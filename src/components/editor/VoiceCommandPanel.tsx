@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { View, Text, StyleSheet, Pressable, TextInput, ScrollView } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
-import { Mic, Send, Keyboard, ShieldAlert, Headphones, Settings, Scissors, Ruler, CopyPlus, Trash2, Gauge } from "lucide-react-native";
+import { Mic, Send, Keyboard, ShieldAlert, Headphones, Settings, Scissors, Ruler, Trash2, Gauge } from "lucide-react-native";
 import { useAskScrevoCore, FollowUpChips } from "./AskScrevo";
 import type { MicAccess } from "@/hooks/useMicAccess";
 import { useStore } from "@/store/useStore";
@@ -47,7 +47,7 @@ export function VoiceTopBar({ mic, right }: { mic: MicAccess; right?: React.Reac
 export function VoiceCommandPanel({ mic, autoStart }: { mic: MicAccess; autoStart?: boolean }) {
   const core = useAskScrevoCore();
   const { value, setValue, listening, startListening, stopListening, thinking, submit, followUp } = core;
-  const { openPanel, splitClipAtPlayhead, deleteClip, duplicateClip, selectedClipId, editing, playhead, toast } = useStore();
+  const { openPanel, splitClipAtPlayhead, deleteClip, selectedClipId, editing, playhead, toast } = useStore();
   const [mode, setMode] = useState<"voice" | "text">("voice");
 
   const micReady = mic.granted;
@@ -72,7 +72,6 @@ export function VoiceCommandPanel({ mic, autoStart }: { mic: MicAccess; autoStar
   const quick = [
     { id: "split", label: "Split", Icon: Scissors, run: () => splitClipAtPlayhead() },
     { id: "trim", label: "Trim", Icon: Ruler, run: () => openPanel("trim") },
-    { id: "duplicate", label: "Duplicate", Icon: CopyPlus, run: withClip((id) => { duplicateClip(id); toast("Clip duplicated", "success"); }, "duplicate") },
     { id: "delete", label: "Delete", Icon: Trash2, run: withClip((id) => { deleteClip(id); toast("Clip deleted", "success"); }, "delete") },
     { id: "speed", label: "Speed", Icon: Gauge, run: () => openPanel("speed") },
   ];

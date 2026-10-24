@@ -91,14 +91,20 @@ export function TrimPanel() {
         <Text style={styles.readoutBig}>{fmtTime(clip.duration)}</Text>
         <Text style={styles.readoutSub}>{fmtTime(clip.start)} → {fmtTime(clip.start + clip.duration)}</Text>
       </View>
-      {(["start", "end"] as const).map((side) => (
+      {/* only the directions that take footage away: a trim cannot put back
+          what was never kept, and offering the other way round just failed */}
+      {([
+        ["start", "Head", 0.5],
+        ["end", "Tail", -0.5],
+      ] as const).map(([side, label, delta]) => (
         <View key={side} style={styles.trimRow}>
-          <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700", textTransform: "capitalize" }}>{side} handle</Text>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <Pressable onPress={() => trimClip(clip.id, side, -0.5)} style={styles.stepBtn}>
+          <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>{label}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Text style={{ color: colors.ink500, fontSize: 11 }}>trim in</Text>
+            <Pressable onPress={() => trimClip(clip.id, side, delta / 2)} style={styles.stepBtn}>
               <Minus size={14} color="#fff" />
             </Pressable>
-            <Pressable onPress={() => trimClip(clip.id, side, 0.5)} style={styles.stepBtn}>
+            <Pressable onPress={() => trimClip(clip.id, side, delta)} style={styles.stepBtn}>
               <Plus size={14} color="#fff" />
             </Pressable>
           </View>

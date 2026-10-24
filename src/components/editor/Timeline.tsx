@@ -22,7 +22,7 @@ export function Timeline() {
   const {
     editing, playhead, seek, timelinePxPerSec, setTimelineZoom,
     selectedClipId, selectClip, setSelectedTrack,
-    deleteClip, duplicateClip, splitFlashAt,
+    deleteClip, splitFlashAt,
   } = useStore();
   const p = editing();
   const pxps = timelinePxPerSec;
@@ -79,9 +79,6 @@ export function Timeline() {
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           {selected && (
             <>
-              <Pressable onPress={() => duplicateClip(selected.id)} style={styles.miniBtn}>
-                <Copy size={15} color={colors.ink200} />
-              </Pressable>
               <Pressable onPress={() => deleteClip(selected.id)} style={[styles.miniBtn, { backgroundColor: "rgba(229,72,77,0.15)" }]}>
                 <Trash2 size={15} color="#FCA5A5" />
               </Pressable>
