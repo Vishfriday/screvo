@@ -6,7 +6,7 @@ import * as Clipboard from "expo-clipboard";
 import Animated, { FadeIn } from "react-native-reanimated";
 import {
   X, Check, Download, Link2, RotateCcw, Share as ShareIcon,
-  FileVideo, Smartphone, FileText, ListChecks, BookOpen, MousePointer2, Share2,
+  FileVideo, Smartphone, FileText, ListChecks, BookOpen, Share2,
   Gauge, Music, Clapperboard, MonitorPlay, Waves,
 } from "lucide-react-native";
 import { Segmented, Toggle } from "@/components/ui/Controls";
@@ -15,6 +15,7 @@ import { ShareSheet } from "@/components/ShareSheet";
 import { Thumb } from "@/components/Thumb";
 import { useStore } from "@/store/useStore";
 import { saveProjectVideo, prettyBytes, NoFootageError, SaveCancelledError } from "@/lib/export/save";
+import { saveProjectDocument, type DocumentKind } from "@/lib/export/document";
 import { ExportFeatureMissingError } from "../../modules/screvo-screen-capture";
 import { describeSize } from "@/lib/quality";
 import { fmtSpeed, projectSpeed, finishedDuration } from "@/lib/speed";
@@ -24,10 +25,9 @@ import { colors } from "@/theme/tokens";
 const FORMATS = [
   { id: "mp4", label: "MP4", Icon: FileVideo, note: "Universal video file" },
   { id: "vertical", label: "Vertical Video", Icon: Smartphone, note: "9:16, optimised for phones" },
-  { id: "sop", label: "SOP PDF", Icon: FileText, note: "Numbered steps + screenshots" },
-  { id: "guide", label: "Step-by-Step Guide", Icon: ListChecks, note: "Doc with captioned frames" },
+  { id: "sop", label: "SOP document", Icon: FileText, note: "Numbered steps — print to PDF" },
+  { id: "guide", label: "Step-by-Step Guide", Icon: ListChecks, note: "The steps and their narration" },
   { id: "kb", label: "Knowledge Base Article", Icon: BookOpen, note: "HTML for your help centre" },
-  { id: "interactive", label: "Interactive Walkthrough", Icon: MousePointer2, note: "Clickable hotspot replay" },
   { id: "social", label: "Social Video", Icon: Share2, note: "Captioned, sound-off ready" },
 ];
 
@@ -68,17 +68,24 @@ export default function ExportScreen() {
 
   const [saving, setSaving] = useState(false);
   const [savedTo, setSavedTo] = useState<string | null>(null);
+  const [format, setFormat] = useState("vertical");
+  /** the written formats save a document; everything else saves the video */
+  const isDoc = ["sop", "guide", "kb"].includes(format);
 
-  /** Copies the real footage into a folder the user picks. */
+  /** Saves what the chosen format actually is, into a folder the user picks. */
   const saveToDevice = async () => {
     if (!project || saving) return;
     setSaving(true);
     try {
-      const written = await saveProjectVideo(project, {
-        includeVoice: opts.aiVoice,
-        includeMusic: opts.music,
-        includeSourceAudio: opts.roomAudio,
-      });
+      // a written format saves a document; it used to save the video whatever
+      // was picked, so choosing "SOP" handed you an MP4
+      const written = isDoc
+        ? await saveProjectDocument(project, format as DocumentKind)
+        : await saveProjectVideo(project, {
+            includeVoice: opts.aiVoice,
+            includeMusic: opts.music,
+            includeSourceAudio: opts.roomAudio,
+          });
       setSavedTo(written.name);
       toast(`Saved ${written.name} · ${prettyBytes(written.bytes)}`, "success");
     } catch (e: any) {
@@ -96,7 +103,6 @@ export default function ExportScreen() {
     }
   };
 
-  const [format, setFormat] = useState("vertical");
   const defaultAspect = useStore((s) => s.defaultAspect);
   const [preset, setPreset] = useState<"9:16" | "1:1" | "16:9">(defaultAspect);
   const [opts, setOpts] = useState({ captions: true, branding: true, watermark: false, aiVoice: true, music: true, roomAudio: true, cta: true });
@@ -104,7 +110,6 @@ export default function ExportScreen() {
   const [progress, setProgress] = useState(0);
   const armed = useRef(false);
   const [sharing, setSharing] = useState(false);
-  const isDoc = ["sop", "guide", "kb"].includes(format);
 
   useEffect(() => {
     if (phase !== "rendering") return;
@@ -282,7 +287,9 @@ export default function ExportScreen() {
           <View style={styles.doneCircle}>
             <Check size={40} color={colors.teal} strokeWidth={3} />
           </View>
-          <Text style={{ color: "#fff", fontSize: 20, fontWeight: "900", marginTop: 20 }}>Your video is ready.</Text>
+          <Text style={{ color: "#fff", fontSize: 20, fontWeight: "900", marginTop: 20 }}>
+            {isDoc ? "Your document is ready." : "Your video is ready."}
+          </Text>
           <Text style={{ color: colors.ink400, fontSize: 13, marginTop: 4, textAlign: "center" }}>
             {project.name} · {FORMATS.find((f) => f.id === format)?.label}{!isDoc && ` · ${preset} ${quality}`}
           </Text>
@@ -292,9 +299,9 @@ export default function ExportScreen() {
             </Text>
           ) : (
             <Text style={{ color: colors.ink500, fontSize: 11, marginTop: 10, textAlign: "center", lineHeight: 16 }}>
-              Save writes the real cut: the kept spans, at {fmtSpeed(projectSpeed(project))}, with the
-              narration{project.music ? " and music" : ""} mixed in. Zooms, captions and the intro card
-              play inside Screvo but are not burned into the file yet.
+              {isDoc
+                ? "Save writes the steps and their narration as an HTML page you can read, share or print to PDF."
+                : `Save writes the real cut: the kept spans, at ${fmtSpeed(projectSpeed(project))}, with the narration${project.music ? " and music" : ""} mixed in. Zooms, captions and the intro card play inside Screvo but are not burned into the file yet.`}
             </Text>
           )}
           <View style={styles.doneGrid}>
