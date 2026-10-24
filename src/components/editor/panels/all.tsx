@@ -275,19 +275,70 @@ export function VolumePanel() {
 export function CropPanel() {
   const { commit, toast } = useStore();
   const { id, setId, clip } = useDefaultClip(["video"]);
-  const [fit, setFit] = useState<"fill" | "fit" | "square" | "wide">("fill");
-  const [scale, setScale] = useState(1);
   if (!clip) return <EmptyNote>No video clips.</EmptyNote>;
+
+  // The crop lives on the clip, so the panel always shows what the preview is
+  // actually doing — reopening it used to reset the controls to their defaults
+  // while the video stayed where it was.
+  const current = (clip.meta?.crop ?? {}) as { fit?: string; scale?: number };
+  const fit = (current.fit ?? "fill") as "fill" | "fit" | "square" | "wide";
+  const scale = current.scale ?? 1;
+  const cropped = fit !== "fill" || scale !== 1;
+
+  const write = (patch: { fit?: string; scale?: number }) =>
+    commit("Crop clip", (d) => {
+      const c = d.clips.find((x) => x.id === clip.id);
+      if (!c) return;
+      const next = { fit, scale, ...patch };
+      c.meta = { ...(c.meta ?? {}), crop: next };
+    });
+
   return (
     <View>
       <PanelSection title="Clip">
         <ClipPicker tracks={["video"]} value={id} onChange={setId} />
       </PanelSection>
       <PanelSection title="Framing">
-        <Segmented value={fit} onChange={(v) => setFit(v as any)} options={[{ value: "fill", label: "Fill" }, { value: "fit", label: "Fit" }, { value: "square", label: "1:1" }, { value: "wide", label: "16:9" }]} />
+        <Segmented
+          value={fit}
+          onChange={(v) => write({ fit: v })}
+          options={[
+            { value: "fill", label: "Fill" },
+            { value: "fit", label: "Fit" },
+            { value: "square", label: "1:1" },
+            { value: "wide", label: "16:9" },
+          ]}
+        />
       </PanelSection>
-      <Slider label="Scale" min={1} max={2.5} step={0.05} value={scale} onChange={setScale} format={(v) => `${v.toFixed(2)}×`} />
-      <AddButton label="Apply crop" onPress={() => { commit("Crop clip", (d) => { const c = d.clips.find((x) => x.id === clip.id); if (c) c.meta = { ...(c.meta ?? {}), crop: { fit, scale } }; }); toast("Crop applied to clip", "success"); }} />
+      <Slider
+        label="Scale"
+        min={1}
+        max={2.5}
+        step={0.05}
+        value={scale}
+        onChange={(v) => write({ scale: Number(v.toFixed(2)) })}
+        format={(v) => `${v.toFixed(2)}×`}
+      />
+      <View style={styles.note}>
+        <Text style={{ color: colors.ink400, fontSize: 11, lineHeight: 16 }}>
+          {fit === "fill"
+            ? "Footage fills the 9:16 frame, cropping whatever does not fit."
+            : fit === "fit"
+              ? "The whole frame is visible, with bars where it does not reach the edges."
+              : `Framed as ${fit === "square" ? "1:1" : "16:9"}, centred in the 9:16 video.`}
+        </Text>
+      </View>
+      {cropped && (
+        <Pressable
+          onPress={() => {
+            write({ fit: "fill", scale: 1 });
+            toast("Framing reset", "success");
+          }}
+          style={styles.wideBtn}
+        >
+          <Text style={{ color: colors.ink200, fontSize: 12, fontWeight: "700" }}>Reset framing</Text>
+        </Pressable>
+      )}
     </View>
   );
 }

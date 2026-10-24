@@ -79,7 +79,10 @@ export function Sheet({
             {preview ? <View style={{ paddingHorizontal: 20, paddingBottom: 12 }}>{preview}</View> : null}
             <ScrollView
               style={{ flexShrink: 1 }}
-              contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 16 }}
+              // the navigation bar overlaps the bottom of the sheet, so the last
+              // control in a panel without a footer would sit underneath it and
+              // simply not take taps
+              contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 16 }}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >

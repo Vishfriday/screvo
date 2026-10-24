@@ -29,6 +29,7 @@ function SourceVideo({
   removed,
   speed = 1,
   volume = 0,
+  contentFit = "cover",
 }: {
   uri: string;
   projectId: string;
@@ -39,6 +40,8 @@ function SourceVideo({
   speed?: number;
   /** the recording's own sound in the preview; 0 keeps it silent */
   volume?: number;
+  /** cover crops the footage to the frame, contain shows all of it */
+  contentFit?: "cover" | "contain";
 }) {
   const storePlaying = useStore((s) => s.playing);
   const setRealDuration = useStore((s) => s.setRealDuration);
@@ -95,7 +98,7 @@ function SourceVideo({
     }
   }, [isPlaying, playhead, player, projectId, setRealDuration, setFrameSize, removed, speed]);
 
-  return <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} />;
+  return <VideoView player={player} style={StyleSheet.absoluteFill} contentFit={contentFit} nativeControls={false} />;
 }
 
 function activeAt<T extends { start: number; duration: number }>(items: T[], t: number): T[] {
@@ -213,6 +216,15 @@ export function VideoStage({
   );
   const frameIdx = currentClip?.frame ?? 0;
 
+  // Reframing, as the Crop panel set it on this clip. "fill" and "fit" decide
+  // whether the footage is cropped to the frame or shown whole; "square" and
+  // "wide" letterbox it into a band of that shape, centred, the way the
+  // finished video would be delivered for those aspects.
+  const crop = (currentClip?.meta?.crop ?? {}) as { fit?: string; scale?: number };
+  const cropFit: string = crop.fit ?? "fill";
+  const cropScale = Math.max(1, Math.min(3, crop.scale ?? 1));
+  const bandAspect = cropFit === "square" ? 1 : cropFit === "wide" ? 16 / 9 : null;
+
   const zoom = activeAt(project.effects.filter((e) => e.type === "zoom"), t)[0];
   const transitions = activeAt(project.effects.filter((e) => e.type === "transition"), t);
   const touchFx = activeAt(project.effects.filter((e) => e.type === "touchpoint"), t);
@@ -271,21 +283,35 @@ export function VideoStage({
     >
       {/* frame */}
       <Animated.View style={[StyleSheet.absoluteFill, zoomStyle]}>
-        {project.sourceUri ? (
-          <SourceVideo
-            uri={project.sourceUri}
-            projectId={project.id}
-            playhead={t}
-            playing={playing}
-            removed={project.removed}
-            speed={projectSpeed(project)}
-            volume={audible ? project.audio?.sourceVolume ?? 0 : 0}
-          />
-        ) : (
-          <View style={{ width: BASE_W, height: BASE_H, transform: [{ scale }], position: "absolute", left: "50%", top: "50%", marginLeft: -BASE_W / 2, marginTop: -BASE_H / 2 }}>
-            <Frame index={frameIdx} />
+        <View style={styles.cropHost}>
+          <View
+            style={[
+              // a band keeps its own shape and is centred by the host; fill and
+              // fit simply take the whole 9:16 stage
+              bandAspect
+                ? { width: "100%", aspectRatio: bandAspect, overflow: "hidden" }
+                : { width: "100%", height: "100%" },
+              cropScale !== 1 ? { transform: [{ scale: cropScale }] } : null,
+            ]}
+          >
+            {project.sourceUri ? (
+              <SourceVideo
+                uri={project.sourceUri}
+                projectId={project.id}
+                playhead={t}
+                playing={playing}
+                removed={project.removed}
+                speed={projectSpeed(project)}
+                volume={audible ? project.audio?.sourceVolume ?? 0 : 0}
+                contentFit={cropFit === "fit" ? "contain" : "cover"}
+              />
+            ) : (
+              <View style={{ width: BASE_W, height: BASE_H, transform: [{ scale }], position: "absolute", left: "50%", top: "50%", marginLeft: -BASE_W / 2, marginTop: -BASE_H / 2 }}>
+                <Frame index={frameIdx} />
+              </View>
+            )}
           </View>
-        )}
+        </View>
       </Animated.View>
 
       {/* filter effects */}
@@ -475,6 +501,8 @@ function isLight(hex: string) {
 }
 
 const styles = StyleSheet.create({
+  // centres whatever shape the crop asks for inside the 9:16 stage
+  cropHost: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   stage: { aspectRatio: 9 / 16, width: "100%", borderRadius: 26, backgroundColor: "#000", overflow: "hidden" },
   overlayText: { color: "#fff", fontWeight: "900", textAlign: "center", textShadowColor: "rgba(0,0,0,0.6)", textShadowRadius: 12, textShadowOffset: { width: 0, height: 2 } },
   subWord: { color: "#fff", fontWeight: "800", textShadowColor: "rgba(0,0,0,0.55)", textShadowRadius: 8, textShadowOffset: { width: 0, height: 2 } },
