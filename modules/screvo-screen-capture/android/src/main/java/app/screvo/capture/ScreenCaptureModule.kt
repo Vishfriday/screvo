@@ -3,6 +3,7 @@ package app.screvo.capture
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import expo.modules.kotlin.Promise
@@ -50,7 +51,17 @@ class ScreenCaptureModule : Module() {
       startPromise = promise
       wireServiceCallbacks(withAudio, longEdge)
       val manager = activity.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-      activity.startActivityForResult(manager.createScreenCaptureIntent(), REQUEST_CODE)
+      // From Android 14 the system dialog defaults to "Share one app", which
+      // records a single app rather than the screen — and a recorder that
+      // quietly captures the wrong thing is worse than one that refuses. Asking
+      // for the default display removes that option, so the dialog is simply
+      // "share your screen".
+      val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
+      } else {
+        manager.createScreenCaptureIntent()
+      }
+      activity.startActivityForResult(intent, REQUEST_CODE)
     }
 
     /**
