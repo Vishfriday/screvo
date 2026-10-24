@@ -227,7 +227,9 @@ export default function RecordScreen() {
             <Text style={styles.introBody}>
               {capturing
                 ? "Run your workflow in any app. Come back here and stop when you are done — the clip goes straight into a project."
-                : "Android asks once for permission, then Screvo captures the screen itself. Everything you do in any app is recorded."}
+                : Platform.OS === "web"
+                  ? "Your browser asks which window or screen to share, then Screvo records it. Quality follows whatever surface you pick."
+                  : "Android asks once for permission, then Screvo captures the screen itself. Everything you do in any app is recorded."}
             </Text>
             {!capturing && (
               <>
@@ -235,12 +237,14 @@ export default function RecordScreen() {
                   <View style={styles.stepNum}>{mic ? <Mic size={13} color="#fff" /> : <MicOff size={13} color="#fff" />}</View>
                   <Text style={styles.stepText}>{mic ? "Microphone on — narrate as you go" : "Microphone off — silent capture"}</Text>
                 </Pressable>
-                <Pressable onPress={() => setQualityOpen(true)} style={styles.stepRow}>
-                  <View style={styles.stepNum}><Gauge size={13} color="#fff" /></View>
-                  <Text style={styles.stepText}>
-                    Quality: {qualityFor(captureQuality).label} — {qualityFor(captureQuality).note}
-                  </Text>
-                </Pressable>
+                {Platform.OS !== "web" && (
+                  <Pressable onPress={() => setQualityOpen(true)} style={styles.stepRow}>
+                    <View style={styles.stepNum}><Gauge size={13} color="#fff" /></View>
+                    <Text style={styles.stepText}>
+                      Quality: {qualityFor(captureQuality).label} — {qualityFor(captureQuality).note}
+                    </Text>
+                  </Pressable>
+                )}
               </>
             )}
           </View>

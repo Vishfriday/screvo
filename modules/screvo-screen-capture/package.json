@@ -1,7 +1,7 @@
 {
   "name": "screvo-screen-capture",
   "version": "1.0.0",
-  "description": "In-app screen recording for Screvo — Android MediaProjection behind an Expo module.",
-  "main": "index.ts",
+  "description": "In-app screen recording for Screvo \u2014 Android MediaProjection behind an Expo module.",
+  "main": "index",
   "private": true
 }
