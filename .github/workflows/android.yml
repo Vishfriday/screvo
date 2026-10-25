@@ -27,7 +27,13 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - uses: android-actions/setup-android@v3
+      - name: Check the Android SDK the runner already has
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms" 2>/dev/null | tail -3
+          # the image ships the SDK with licences accepted; Gradle fetches any
+          # NDK or CMake version the template asks for
+          yes | "$ANDROID_HOME"/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null 2>&1 || true
 
       - name: Install dependencies
         run: npm ci
