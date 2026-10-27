@@ -21,6 +21,7 @@ import { LivePreview } from "@/components/editor/LivePreview";
 import { Sheet } from "@/components/ui/Sheet";
 import { Segmented } from "@/components/ui/Controls";
 import { fmtTime, fmtTimeMs } from "@/lib/format";
+import { aspectRatioOf } from "@/lib/aspect";
 import { fmtSpeed, projectSpeed, finishedDuration } from "@/lib/speed";
 import { colors } from "@/theme/tokens";
 
@@ -74,8 +75,13 @@ export default function EditorScreen() {
     lastCutAt != null && p.chapters.some((c) => Math.abs(c.start - lastCutAt) < 0.3);
 
   const voiceOpen = activePanel === "voice";
-  // the preview stays the dominant element; the timeline and tools scroll under it
-  const previewW = Math.min(width - 24, Math.round(((height * 0.44) * 9) / 16));
+  // while the Crop panel is open the footage answers to the fingers, so the
+  // tap-to-play overlay steps aside and lets the gestures through
+  const cropOpen = activePanel === "crop";
+  // the preview stays the dominant element; the timeline and tools scroll under
+  // it. A landscape project is wide and short, so the height budget only binds
+  // on the vertical shapes.
+  const previewW = Math.min(width - 24, Math.round(height * 0.44 * aspectRatioOf(p.aspect)));
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -119,8 +125,9 @@ export default function EditorScreen() {
               showTint={!beforeAfter}
               onStageTap={placePicker ? (x, y) => finishPlacing(x, y) : undefined}
               positioningFor={placePicker?.label ?? null}
+              cropEditing={cropOpen}
             />
-            {!placePicker && (
+            {!placePicker && !cropOpen && (
               <Pressable onPress={togglePlay} style={StyleSheet.absoluteFill}>
                 {!playing && (
                   <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>

@@ -9,15 +9,21 @@ import {
 import { IntroPanel, MusicPanel } from "./panels/media";
 import { NoisePanel } from "./panels/noise";
 import { LivePreview } from "./LivePreview";
+import { ReframePreview } from "./ReframePreview";
 
-const REGISTRY: Record<string, { title: string; subtitle: string; C: React.ComponentType; size: "md" | "lg" }> = {
+// `preview` replaces the thumbnail strip for panels that need the video big
+// enough to work on directly
+const REGISTRY: Record<
+  string,
+  { title: string; subtitle: string; C: React.ComponentType; size: "md" | "lg"; preview?: React.ComponentType }
+> = {
   trim: { title: "Trim", subtitle: "Adjust clip in / out points", C: TrimPanel, size: "md" },
   speed: { title: "Speed", subtitle: "Play the video faster or slower", C: SpeedPanel, size: "lg" },
   intro: { title: "Intro & Title", subtitle: "An opening card from a template", C: IntroPanel, size: "lg" },
   music: { title: "Music", subtitle: "A bed under the narration", C: MusicPanel, size: "lg" },
   noise: { title: "Noise Cancellation", subtitle: "Clean the recording's own sound", C: NoisePanel, size: "lg" },
   volume: { title: "Volume", subtitle: "Level a track", C: VolumePanel, size: "md" },
-  crop: { title: "Crop", subtitle: "Reframe inside 9:16", C: CropPanel, size: "md" },
+  crop: { title: "Crop", subtitle: "Shape, framing, pinch to zoom", C: CropPanel, size: "lg", preview: ReframePreview },
   zoom: { title: "Zoom", subtitle: "Push in on the action", C: ZoomPanel, size: "lg" },
   parallax: { title: "Parallax", subtitle: "Add depth and motion", C: ParallaxPanel, size: "lg" },
   transition: { title: "Transitions", subtitle: "Between clips & chapters", C: TransitionPanel, size: "lg" },
@@ -47,7 +53,13 @@ export function PanelHost() {
       title={entry?.title}
       subtitle={entry?.subtitle}
       size={entry?.size ?? "md"}
-      preview={entry && !placePicker ? <LivePreview /> : undefined}
+      preview={
+        entry && !placePicker
+          ? entry.preview
+            ? React.createElement(entry.preview)
+            : <LivePreview />
+          : undefined
+      }
       peek={!!placePicker}
       peekLabel={placePicker?.label}
       onPeekCancel={cancelPlacing}

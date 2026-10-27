@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DEFAULT_QUALITY, type QualityId } from "@/lib/quality";
+import { aspectForSize } from "@/lib/aspect";
 import { introTemplate } from "@/data/intros";
 import type {
   Project,
@@ -135,6 +136,8 @@ interface StoreState {
   setRealDuration: (id: string, sec: number) => void;
   /** records the picture size of a project's source file */
   setFrameSize: (id: string, width: number, height: number) => void;
+  /** the shape of the finished video, chosen deliberately */
+  setAspect: (id: string, aspect: "9:16" | "1:1" | "16:9") => void;
   /** the resolution Screvo's own recorder aims for, kept across sessions */
   captureQuality: QualityId;
   setCaptureQuality: (q: QualityId) => void;
@@ -385,7 +388,6 @@ export const useStore = create<StoreState>()(
                 ...p,
                 status: "ready",
                 durationSec: dur,
-                aspect: "9:16",
                 summary: src.summary,
                 thumbnailFrame: real ? p.thumbnailFrame : 2,
                 chapters: real ? fit(clone(src.chapters)) : clone(src.chapters),
@@ -688,8 +690,21 @@ export const useStore = create<StoreState>()(
             projects: get().projects.map((p) => {
               if (p.id !== id || !width || !height) return p;
               if (p.frameSize?.width === width && p.frameSize?.height === height) return p;
-              return { ...p, frameSize: { width, height } };
+              const size = { width, height };
+              // A landscape recording should open landscape. The picture size is
+              // only known once a player has opened the file, which is after the
+              // project exists, so this is where the shape catches up with the
+              // footage — unless the user has already chosen one.
+              const aspect = p.aspectAuto === false ? p.aspect : aspectForSize(size);
+              return { ...p, frameSize: size, aspect };
             }),
+          }),
+
+        setAspect: (id, aspect) =>
+          set({
+            projects: get().projects.map((p) =>
+              p.id === id ? { ...p, aspect, aspectAuto: false, updatedAt: Date.now() } : p,
+            ),
           }),
 
         captureQuality: DEFAULT_QUALITY,
@@ -722,7 +737,10 @@ export const useStore = create<StoreState>()(
             durationSec: partial.durationSec ?? 60,
             createdAt: now,
             updatedAt: now,
-            aspect: "9:16",
+            // an imported landscape video is landscape to begin with; the size
+            // is often unknown this early, and setFrameSize finishes the job
+            aspect: partial.aspect ?? (partial.frameSize ? aspectForSize(partial.frameSize) : get().defaultAspect),
+            aspectAuto: partial.aspect == null,
             summary: partial.summary ?? "",
             thumbnailFrame: partial.thumbnailFrame ?? 0,
             chapters: partial.chapters ?? [],

@@ -11,6 +11,17 @@ import { generateRecommendations, generateSubtitlesFromScript, transcribeToSubti
 import { fmtTime } from "@/lib/format";
 import { SPEEDS, fmtSpeed, projectSpeed, finishedDuration, narrationOverrun } from "@/lib/speed";
 import { colors } from "@/theme/tokens";
+import {
+  ASPECTS,
+  DEFAULT_CROP,
+  aspectForSize,
+  clampPan,
+  cropOf,
+  isCropped,
+  projectAspect,
+  type AspectId,
+  type Crop,
+} from "@/lib/aspect";
 
 const H_POS = ["top", "above-middle", "middle", "below-middle", "bottom"];
 const V_POS = ["center-left", "center", "center-right"];
@@ -287,65 +298,101 @@ export function VolumePanel() {
 
 // ---------------- CROP ----------------
 export function CropPanel() {
-  const { commit, toast } = useStore();
+  const { commit, toast, editing, setAspect } = useStore();
   const { id, setId, clip } = useDefaultClip(["video"]);
-  if (!clip) return <EmptyNote>No video clips.</EmptyNote>;
+  const p = editing();
+  if (!p || !clip) return <EmptyNote>No video clips.</EmptyNote>;
 
   // The crop lives on the clip, so the panel always shows what the preview is
   // actually doing — reopening it used to reset the controls to their defaults
   // while the video stayed where it was.
-  const current = (clip.meta?.crop ?? {}) as { fit?: string; scale?: number };
-  const fit = (current.fit ?? "fill") as "fill" | "fit" | "square" | "wide";
-  const scale = current.scale ?? 1;
-  const cropped = fit !== "fill" || scale !== 1;
+  const crop = cropOf(clip.meta);
+  const aspect = projectAspect(p);
+  const sourceAspect = aspectForSize(p.frameSize);
+  const offSource = !!p.frameSize && sourceAspect !== aspect;
 
-  const write = (patch: { fit?: string; scale?: number }) =>
+  const write = (patch: Partial<Crop>) =>
     commit("Crop clip", (d) => {
       const c = d.clips.find((x) => x.id === clip.id);
       if (!c) return;
-      const next = { fit, scale, ...patch };
-      c.meta = { ...(c.meta ?? {}), crop: next };
+      c.meta = { ...(c.meta ?? {}), crop: { ...crop, ...patch } };
     });
 
   return (
     <View>
+      <PanelSection title="Video shape">
+        <Segmented
+          value={aspect}
+          onChange={(v) => {
+            setAspect(p.id, v as AspectId);
+            toast(`Video is now ${v}`, "success");
+          }}
+          options={ASPECTS.map((a) => ({ value: a.id, label: a.label }))}
+        />
+        <Text style={{ color: colors.ink500, fontSize: 11, marginTop: 8 }}>
+          {ASPECTS.find((a) => a.id === aspect)?.blurb}
+        </Text>
+      </PanelSection>
+
+      {offSource && (
+        <Pressable
+          onPress={() => {
+            setAspect(p.id, sourceAspect);
+            toast(`Matched the footage — ${sourceAspect}`, "success");
+          }}
+          style={styles.wideBtn}
+        >
+          <Text style={{ color: colors.ink200, fontSize: 12, fontWeight: "700" }}>
+            Match the footage ({sourceAspect})
+          </Text>
+        </Pressable>
+      )}
+
       <PanelSection title="Clip">
         <ClipPicker tracks={["video"]} value={id} onChange={setId} />
       </PanelSection>
+
       <PanelSection title="Framing">
         <Segmented
-          value={fit}
-          onChange={(v) => write({ fit: v })}
+          value={crop.fit}
+          onChange={(v) => write({ fit: v as Crop["fit"] })}
           options={[
             { value: "fill", label: "Fill" },
             { value: "fit", label: "Fit" },
-            { value: "square", label: "1:1" },
-            { value: "wide", label: "16:9" },
           ]}
         />
       </PanelSection>
+
       <Slider
-        label="Scale"
+        label="Zoom"
         min={1}
-        max={2.5}
+        max={4}
         step={0.05}
-        value={scale}
-        onChange={(v) => write({ scale: Number(v.toFixed(2)) })}
+        value={crop.scale}
+        onChange={(v) => {
+          const scale = Number(v.toFixed(2));
+          // pulling the zoom back has to pull the pan in with it, or the
+          // footage would sit off-centre with empty frame beside it
+          const pan = clampPan(crop.x, crop.y, scale);
+          write({ scale, x: pan.x, y: pan.y });
+        }}
         format={(v) => `${v.toFixed(2)}×`}
       />
+
       <View style={styles.note}>
         <Text style={{ color: colors.ink400, fontSize: 11, lineHeight: 16 }}>
-          {fit === "fill"
-            ? "Footage fills the 9:16 frame, cropping whatever does not fit."
-            : fit === "fit"
-              ? "The whole frame is visible, with bars where it does not reach the edges."
-              : `Framed as ${fit === "square" ? "1:1" : "16:9"}, centred in the 9:16 video.`}
+          {crop.fit === "fill"
+            ? `Footage fills the ${aspect} frame, cropping whatever does not fit.`
+            : `The whole picture is visible inside the ${aspect} frame, with bars where it does not reach the edges.`}
+          {"\n"}Drag the video to move it, pinch to zoom — the preview takes your
+          fingers while this panel is open.
         </Text>
       </View>
-      {cropped && (
+
+      {isCropped(crop) && (
         <Pressable
           onPress={() => {
-            write({ fit: "fill", scale: 1 });
+            write(DEFAULT_CROP);
             toast("Framing reset", "success");
           }}
           style={styles.wideBtn}

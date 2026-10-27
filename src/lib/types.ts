@@ -166,6 +166,10 @@ export interface Project {
   createdAt: number;
   updatedAt: number;
   aspect: "9:16" | "1:1" | "16:9";
+  /** true while the shape is still being taken from the footage, so measuring
+   *  a landscape source can turn the project landscape. A deliberate choice in
+   *  the Crop panel clears this and the shape stops moving on its own. */
+  aspectAuto?: boolean;
   summary: string;
   thumbnailFrame: number;
   chapters: Chapter[];

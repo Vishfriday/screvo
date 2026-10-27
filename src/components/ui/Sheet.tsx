@@ -2,6 +2,7 @@ import React from "react";
 import { Modal, View, Text, StyleSheet, Pressable, ScrollView, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { X } from "lucide-react-native";
 import { colors } from "@/theme/tokens";
 
@@ -40,7 +41,9 @@ export function Sheet({
 
   return (
     <Modal visible={open} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.root}>
+      {/* a Modal is its own native view tree, outside the app's gesture root,
+          so a pinch or drag inside a sheet needs this to be seen at all */}
+      <GestureHandlerRootView style={styles.root}>
         {!peek && (
           <AnimatedPressable
             entering={FadeIn.duration(180)}
@@ -91,7 +94,7 @@ export function Sheet({
             {footer ? <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>{footer}</View> : null}
           </Animated.View>
         )}
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }

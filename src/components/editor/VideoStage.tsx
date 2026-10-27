@@ -5,8 +5,10 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
+  runOnJS,
   Easing,
 } from "react-native-reanimated";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useStore } from "@/store/useStore";
 import { sourceTimeAt } from "@/lib/timemap";
@@ -16,6 +18,25 @@ import { RippleOnce, PulseRing } from "../ui/Motion";
 import { introTemplate, introProgress } from "@/data/intros";
 import { projectSpeed } from "@/lib/speed";
 import { IntroCard } from "./IntroCard";
+import { aspectRatioOf, cropOf, clampPan } from "@/lib/aspect";
+
+/**
+ * Hands the footage to the pinch and drag gestures, but only while the Crop
+ * panel is open. The rest of the time the stage must stay an ordinary tap
+ * target, because a tap there places a touchpoint or a CTA.
+ */
+function ReframeArea({
+  enabled,
+  gesture,
+  children,
+}: {
+  enabled: boolean;
+  gesture: any;
+  children: React.ReactElement;
+}) {
+  if (!enabled) return children;
+  return <GestureDetector gesture={gesture}>{children}</GestureDetector>;
+}
 
 /**
  * Plays the project's real footage, driven by the editor playhead: seeks while
@@ -195,6 +216,7 @@ export function VideoStage({
   showTint = true,
   onStageTap,
   positioningFor,
+  cropEditing,
   audible = false,
   style,
 }: {
@@ -207,6 +229,9 @@ export function VideoStage({
   audible?: boolean;
   onStageTap?: (x: number, y: number) => void;
   positioningFor?: string | null;
+  /** lets the footage be pinched and dragged inside the frame — on only while
+   *  the Crop panel is open, so a tap elsewhere still places touchpoints */
+  cropEditing?: boolean;
   style?: any;
 }) {
   const [box, setBox] = useState({ w: 0, h: 0 });
@@ -221,14 +246,11 @@ export function VideoStage({
   );
   const frameIdx = currentClip?.frame ?? 0;
 
-  // Reframing, as the Crop panel set it on this clip. "fill" and "fit" decide
-  // whether the footage is cropped to the frame or shown whole; "square" and
-  // "wide" letterbox it into a band of that shape, centred, the way the
-  // finished video would be delivered for those aspects.
-  const crop = (currentClip?.meta?.crop ?? {}) as { fit?: string; scale?: number };
-  const cropFit: string = crop.fit ?? "fill";
-  const cropScale = Math.max(1, Math.min(3, crop.scale ?? 1));
-  const bandAspect = cropFit === "square" ? 1 : cropFit === "wide" ? 16 / 9 : null;
+  // Reframing, as the Crop panel and the fingers left it on this clip. The
+  // shape of the frame is the project's own aspect now, so "fill" and "fit"
+  // only decide whether the footage is cropped to that frame or shown whole.
+  const crop = cropOf(currentClip?.meta);
+  const frameRatio = aspectRatioOf(project.aspect);
 
   const zoom = activeAt(project.effects.filter((e) => e.type === "zoom"), t)[0];
   const transitions = activeAt(project.effects.filter((e) => e.type === "transition"), t);
@@ -333,6 +355,120 @@ export function VideoStage({
 
   const scale = box.w ? box.w / BASE_W : 0.25;
 
+  // --- reframing with the fingers ---
+  // The pinch and the drag run live on the UI thread as a delta on top of the
+  // committed crop, and are written to the clip when the fingers lift, so a
+  // single adjustment is a single step in undo rather than hundreds.
+  const commitProject = useStore((s) => s.commit);
+  const gScale = useSharedValue(1);
+  const gx = useSharedValue(0);
+  const gy = useSharedValue(0);
+  // how many fingers' worth of gesture is still in progress, and where each
+  // gesture picked up from, so a second pinch or drag adds to the first
+  const active = useSharedValue(0);
+  const pinchBase = useSharedValue(1);
+  const panBaseX = useSharedValue(0);
+  const panBaseY = useSharedValue(0);
+  const clipId = currentClip?.id ?? null;
+
+  const applyCrop = (mul: number, dx: number, dy: number) => {
+    // the live delta is only cleared once the committed crop has replaced it,
+    // otherwise the footage snaps back to where it was for a frame
+    const clearDelta = () => {
+      gScale.value = 1;
+      gx.value = 0;
+      gy.value = 0;
+    };
+    // ignore the specks: a tap that moved two pixels is not a reframe, and
+    // committing one would bury the user's real edits in undo
+    if (!clipId || (Math.abs(mul - 1) < 0.01 && Math.abs(dx) < 2 && Math.abs(dy) < 2)) {
+      clearDelta();
+      return;
+    }
+    const nextScale = Math.max(1, Math.min(4, crop.scale * mul));
+    const pan = clampPan(
+      crop.x + dx / Math.max(1, box.w),
+      crop.y + dy / Math.max(1, box.h),
+      nextScale,
+    );
+    commitProject("Reframe clip", (d: Project) => {
+      const c = d.clips.find((x) => x.id === clipId);
+      if (!c) return;
+      c.meta = {
+        ...(c.meta ?? {}),
+        crop: {
+          ...crop,
+          scale: Number(nextScale.toFixed(3)),
+          x: Number(pan.x.toFixed(4)),
+          y: Number(pan.y.toFixed(4)),
+        },
+      };
+    });
+    clearDelta();
+  };
+
+  const cropGesture = useMemo(() => {
+    // One finger drags the picture, two scale it, and the two may overlap: a
+    // pinch often ends with one finger still down and still moving. So the
+    // write happens when the last finger lifts, not when either gesture ends,
+    // and each gesture builds on the delta so far rather than from scratch.
+    const begin = () => {
+      "worklet";
+      active.value += 1;
+    };
+    const finish = () => {
+      "worklet";
+      active.value = Math.max(0, active.value - 1);
+      if (active.value === 0) runOnJS(applyCrop)(gScale.value, gx.value, gy.value);
+    };
+
+    const pinch = Gesture.Pinch()
+      .onBegin(() => {
+        "worklet";
+        begin();
+        pinchBase.value = gScale.value;
+      })
+      .onUpdate((e) => {
+        "worklet";
+        gScale.value = pinchBase.value * e.scale;
+      })
+      .onFinalize(finish);
+
+    const pan = Gesture.Pan()
+      .minDistance(2)
+      .onBegin(() => {
+        "worklet";
+        begin();
+        panBaseX.value = gx.value;
+        panBaseY.value = gy.value;
+      })
+      .onUpdate((e) => {
+        "worklet";
+        gx.value = panBaseX.value + e.translationX;
+        gy.value = panBaseY.value + e.translationY;
+      })
+      .onFinalize(finish);
+
+    return Gesture.Simultaneous(pinch, pan);
+  }, [clipId, crop.scale, crop.x, crop.y, crop.fit, box.w, box.h]);
+
+  // what is on screen: the committed crop, plus whatever the fingers are doing
+  // right now. Translating before scaling keeps the drag 1:1 with the finger.
+  const cropStyle = useAnimatedStyle(() => {
+    const sc = Math.max(1, Math.min(4, crop.scale * gScale.value));
+    const room = Math.max(0, (sc - 1) / 2);
+    const cl = (v: number) => Math.max(-room, Math.min(room, v));
+    const px = cl(crop.x + gx.value / Math.max(1, box.w));
+    const py = cl(crop.y + gy.value / Math.max(1, box.h));
+    return {
+      transform: [
+        { translateX: px * box.w },
+        { translateY: py * box.h },
+        { scale: sc },
+      ],
+    };
+  }, [crop.scale, crop.x, crop.y, box.w, box.h]);
+
   const handleTap = (e: any) => {
     if (!onStageTap || !box.w) return;
     const { locationX, locationY } = e.nativeEvent;
@@ -343,10 +479,16 @@ export function VideoStage({
     <Pressable
       onPress={onStageTap ? handleTap : undefined}
       onLayout={(e: LayoutChangeEvent) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
-      style={[styles.stage, positioningFor ? { borderColor: "#5B5FD1", borderWidth: 2 } : null, style]}
+      style={[
+        styles.stage,
+        { aspectRatio: frameRatio },
+        positioningFor ? { borderColor: "#5B5FD1", borderWidth: 2 } : null,
+        style,
+      ]}
     >
       {/* frame */}
       <Animated.View style={[StyleSheet.absoluteFill, zoomStyle]}>
+       <ReframeArea enabled={!!cropEditing} gesture={cropGesture}>
         <View
           style={[
             styles.cropHost,
@@ -363,16 +505,7 @@ export function VideoStage({
               : null,
           ]}
         >
-          <View
-            style={[
-              // a band keeps its own shape and is centred by the host; fill and
-              // fit simply take the whole 9:16 stage
-              bandAspect
-                ? { width: "100%", aspectRatio: bandAspect, overflow: "hidden" }
-                : { width: "100%", height: "100%" },
-              cropScale !== 1 ? { transform: [{ scale: cropScale }] } : null,
-            ]}
-          >
+          <Animated.View style={[{ width: "100%", height: "100%" }, cropStyle]}>
             {project.sourceUri ? (
               <SourceVideo
                 uri={project.sourceUri}
@@ -382,15 +515,16 @@ export function VideoStage({
                 removed={project.removed}
                 speed={projectSpeed(project)}
                 volume={audible ? project.audio?.sourceVolume ?? 0 : 0}
-                contentFit={cropFit === "fit" ? "contain" : "cover"}
+                contentFit={crop.fit === "fit" ? "contain" : "cover"}
               />
             ) : (
               <View style={{ width: BASE_W, height: BASE_H, transform: [{ scale }], position: "absolute", left: "50%", top: "50%", marginLeft: -BASE_W / 2, marginTop: -BASE_H / 2 }}>
                 <Frame index={frameIdx} />
               </View>
             )}
-          </View>
+          </Animated.View>
         </View>
+       </ReframeArea>
       </Animated.View>
 
       {/* filter effects */}
@@ -554,6 +688,15 @@ export function VideoStage({
         />
       )}
 
+      {cropEditing && (
+        <View pointerEvents="none" style={styles.reframeGrid}>
+          <View style={[styles.gridLine, { left: "33.333%", width: 1, top: 0, bottom: 0 }]} />
+          <View style={[styles.gridLine, { left: "66.666%", width: 1, top: 0, bottom: 0 }]} />
+          <View style={[styles.gridLine, { top: "33.333%", height: 1, left: 0, right: 0 }]} />
+          <View style={[styles.gridLine, { top: "66.666%", height: 1, left: 0, right: 0 }]} />
+        </View>
+      )}
+
       {positioningFor && (
         <View pointerEvents="none" style={styles.positionHint}>
           <Text style={styles.positionHintText}>Tap to place {positioningFor}</Text>
@@ -580,9 +723,12 @@ function isLight(hex: string) {
 }
 
 const styles = StyleSheet.create({
-  // centres whatever shape the crop asks for inside the 9:16 stage
+  // holds the footage layer; the stage's own shape comes from project.aspect
   cropHost: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  stage: { aspectRatio: 9 / 16, width: "100%", borderRadius: 26, backgroundColor: "#000", overflow: "hidden" },
+  // the thirds, shown only while the footage is being reframed by hand
+  reframeGrid: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderWidth: 1.5, borderColor: "rgba(91,95,209,0.9)", borderRadius: 26 },
+  gridLine: { position: "absolute", backgroundColor: "rgba(255,255,255,0.22)" },
+  stage: { width: "100%", borderRadius: 26, backgroundColor: "#000", overflow: "hidden" },
   overlayText: { color: "#fff", fontWeight: "900", textAlign: "center", textShadowColor: "rgba(0,0,0,0.6)", textShadowRadius: 12, textShadowOffset: { width: 0, height: 2 } },
   subWord: { color: "#fff", fontWeight: "800", textShadowColor: "rgba(0,0,0,0.55)", textShadowRadius: 8, textShadowOffset: { width: 0, height: 2 } },
   cta: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 18, paddingHorizontal: 20, paddingVertical: 12 },
