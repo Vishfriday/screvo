@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { View, Text, StyleSheet, Pressable, LayoutChangeEvent } from "react-native";
 import RNSlider from "@react-native-community/slider";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { useStore } from "@/store/useStore";
 import { colors, radius } from "@/theme/tokens";
 
 export function FieldLabel({ children }: { children: React.ReactNode }) {
@@ -39,6 +40,10 @@ export function Slider({
         step={step}
         value={value}
         onValueChange={onChange}
+        // every tick of a drag is written straight through so the preview
+        // follows the finger; this is what tells the history the drag is over,
+        // so the whole sweep collapses into one undo step instead of dozens
+        onSlidingComplete={() => useStore.getState().endCommitGesture()}
         minimumTrackTintColor={accent}
         maximumTrackTintColor="rgba(255,255,255,0.14)"
         thumbTintColor="#fff"

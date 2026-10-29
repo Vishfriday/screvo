@@ -166,6 +166,8 @@ interface StoreState {
   closeEditor: () => void;
   editing: () => Project | undefined;
   commit: (label: string, recipe: (p: Project) => void) => void;
+  /** tells the history that a continuous edit (a slider drag) has finished */
+  endCommitGesture: () => void;
   undo: () => void;
   redo: () => void;
   canUndo: () => boolean;
@@ -301,6 +303,17 @@ export const useStore = create<StoreState>()(
   persist(
     (set, get) => {
       // apply a recipe to the editing project, recording history
+      // A slider reports every tick it passes through, so one drag of Zoom or
+      // Intensity used to push fifty snapshots and push every earlier edit out
+      // of a fifty-deep history — the drag did not just add noise, it emptied
+      // undo. Consecutive commits carrying the same label are treated as one
+      // gesture: the project updates each time, but the snapshot taken before
+      // the drag began is the one kept. A control that knows when its gesture
+      // ends says so (endCommitGesture), which is what makes the whole drag a
+      // single step however long the ticks take to arrive; the timeout is only
+      // a backstop for controls that cannot say.
+      const lastCommit = { label: "", at: 0 };
+
       const commit: StoreState["commit"] = (label, recipe) => {
         const id = get().editorId;
         if (!id) return;
@@ -318,12 +331,22 @@ export const useStore = create<StoreState>()(
         );
         const copy = projects.slice();
         copy[idx] = next;
+        const now = Date.now();
+        const sameGesture = label === lastCommit.label && now - lastCommit.at < 4000;
+        lastCommit.label = label;
+        lastCommit.at = now;
         set({
           projects: copy,
-          past: [...get().past, prev].slice(-50),
+          // mid-gesture the history is left alone, so undo steps back to
+          // before the whole drag rather than to its second-to-last tick
+          past: sameGesture ? get().past : [...get().past, prev].slice(-50),
           future: [],
         });
-        void label;
+      };
+
+      const endCommitGesture = () => {
+        lastCommit.label = "";
+        lastCommit.at = 0;
       };
 
       return {
@@ -829,6 +852,7 @@ export const useStore = create<StoreState>()(
         },
 
         commit,
+        endCommitGesture,
 
         undo: () => {
           const past = get().past;

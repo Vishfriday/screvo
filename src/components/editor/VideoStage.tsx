@@ -119,6 +119,36 @@ function SourceVideo({
     }
   }, [isPlaying, playhead, player, projectId, setRealDuration, setFrameSize, removed, speed]);
 
+  // The duration and the picture size are only known once the player has
+  // parsed the file, which is after this mounts. The effect above reads them,
+  // but it only runs when the playhead moves or playback starts — and an
+  // editor that has just opened is paused at zero, so there is no next tick to
+  // retry on. A landscape import would sit in a vertical frame, showing a
+  // placeholder duration, until something happened to move the playhead. This
+  // watches for the metadata directly and stops as soon as it has it.
+  useEffect(() => {
+    if (gotSize.current && gotDuration.current) return;
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries += 1;
+      try {
+        if (!gotDuration.current && player.duration > 0) {
+          gotDuration.current = true;
+          setRealDuration(projectId, player.duration);
+        }
+        const size = player.videoTrack?.size;
+        if (!gotSize.current && size?.width && size?.height) {
+          gotSize.current = true;
+          setFrameSize(projectId, size.width, size.height);
+        }
+      } catch {
+        // not ready yet; the next tick tries again
+      }
+      if ((gotSize.current && gotDuration.current) || tries > 40) clearInterval(timer);
+    }, 150);
+    return () => clearInterval(timer);
+  }, [player, projectId, setFrameSize, setRealDuration]);
+
   return <VideoView player={player} style={StyleSheet.absoluteFill} contentFit={contentFit} nativeControls={false} />;
 }
 
