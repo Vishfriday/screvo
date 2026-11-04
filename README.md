@@ -88,3 +88,25 @@ zoom presets (In · Out · In-&-Out) and subtitle background presets (Plain · D
 real bottom-sheet panels, **Ask Screvo** voice/text NL commands → edit ops →
 Undo / Keep, and the export flow. The flagship demo project
 **"How to Create a Customer Workspace"** is seeded on first launch.
+
+## Beta sign-up page
+
+`/beta` on the Vercel deployment serves [public/beta.html](public/beta.html), which
+posts to the serverless function [api/beta-signup.ts](api/beta-signup.ts). Sign-ups
+land in the Postgres table `beta_signups` (created on first submit; one row per
+email, a repeat sign-up updates the row).
+
+Setup: in the Vercel project, add a Neon Postgres database from **Storage** (or set
+`DATABASE_URL` to any Postgres connection string), then redeploy. Read sign-ups with:
+
+```sql
+SELECT name, email, designation, company, phone, created_at
+FROM beta_signups ORDER BY created_at DESC;
+```
+
+### Admin page
+
+`/beta/admin` ([public/beta-admin.html](public/beta-admin.html)) lists sign-ups with
+search, sorting and CSV export. It reads from [api/beta-admin.ts](api/beta-admin.ts),
+which requires a password: set `BETA_ADMIN_TOKEN` (12+ characters, e.g.
+`openssl rand -hex 24`) in the Vercel project's environment variables and redeploy.

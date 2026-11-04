@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Screvo Beta Admin</title>
+<meta name="theme-color" content="#0A0A0F">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=Figtree:wght@400;500;600&display=swap">
+<style>
+  /* Layout: header with counts, toolbar (search + export), then a scrollable table. Dark-only, matching the app. */
+  :root {
+    --bg: #0A0A0F;
+    --surface: #13131C;
+    --surface-2: #191924;
+    --line: rgba(255,255,255,0.08);
+    --fg: #F4F4F8;
+    --muted: #8A8AA3;
+    --soft: #B4B4C8;
+    --brand: #5B5FD1;
+    --brand-hi: #7C80E6;
+    --teal: #3FD1CC;
+    --danger: #FF6B70;
+    --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+    --body: "Figtree", -apple-system, "Segoe UI", system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font: 15px/1.5 var(--body);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: max(28px, env(safe-area-inset-top, 0px)) max(28px, env(safe-area-inset-bottom, 0px));
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; display: grid; gap: 24px; }
+  .brand { display: flex; align-items: center; gap: 10px; font: 700 17px var(--display); }
+  .brand-mark { width: 26px; height: 26px; border-radius: 7px; background: linear-gradient(135deg, var(--brand), var(--teal)); display: grid; place-items: center; }
+  .brand-mark span { width: 7px; height: 13px; border-radius: 2px; background: var(--bg); }
+  .brand small { font: 500 12px var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-left: 4px; }
+
+  .top { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; }
+  h1 { font: 700 30px/1.1 var(--display); letter-spacing: -0.02em; margin: 0; }
+
+  .stats { display: flex; flex-wrap: wrap; gap: 12px; }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; min-width: 130px; }
+  .stat b { display: block; font: 700 24px var(--display); font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  input {
+    font: 15px var(--body); color: var(--fg);
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; outline: none; min-width: 0;
+  }
+  input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(91,95,209,0.3); }
+  #q { flex: 1 1 260px; }
+  button {
+    font: 600 14px var(--body); color: #fff; background: var(--brand);
+    border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer;
+  }
+  button:hover { background: var(--brand-hi); }
+  button.ghost { background: transparent; color: var(--soft); border: 1px solid var(--line); }
+  button.ghost:hover { background: var(--surface-2); color: var(--fg); }
+  button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+  button[disabled] { opacity: .55; cursor: default; }
+
+  .table-box { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 820px; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--surface-2); position: sticky; top: 0; cursor: pointer; user-select: none; white-space: nowrap; }
+  th[aria-sort="ascending"]::after { content: " ↑"; color: var(--teal); }
+  th[aria-sort="descending"]::after { content: " ↓"; color: var(--teal); }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: rgba(255,255,255,0.02); }
+  td.email { color: var(--brand-hi); }
+  td.when { color: var(--soft); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  td.phone { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  td .nil { color: #565670; }
+  .empty { padding: 48px 16px; text-align: center; color: var(--muted); }
+
+  .login { max-width: 400px; margin: 10vh auto 0; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 28px; display: grid; gap: 14px; }
+  .login h1 { font-size: 24px; }
+  .login p { margin: 0; color: var(--muted); }
+  .login label { font-size: 14px; font-weight: 500; color: var(--soft); }
+  .login input { width: 100%; }
+  .err { color: var(--danger); font-size: 14px; margin: 0; }
+  .err:empty { display: none; }
+  .note { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+  <form class="login" id="login" novalidate>
+    <div class="brand"><div class="brand-mark" aria-hidden="true"><span></span></div>Screvo <small>Admin</small></div>
+    <h1>Beta sign-ups</h1>
+    <p>Enter the admin password (the BETA_ADMIN_TOKEN value) to see who has signed up.</p>
+    <div style="display:grid;gap:6px">
+      <label for="token">Admin password</label>
+      <input id="token" type="password" autocomplete="current-password" required>
+    </div>
+    <p class="err" id="loginErr"></p>
+    <button type="submit" id="loginBtn">Show sign-ups</button>
+  </form>
+
+  <main class="wrap" id="app" hidden>
+    <div class="top">
+      <div style="display:grid;gap:10px">
+        <div class="brand"><div class="brand-mark" aria-hidden="true"><span></span></div>Screvo <small>Admin</small></div>
+        <h1>Beta sign-ups</h1>
+      </div>
+      <div class="stats">
+        <div class="stat"><b id="sTotal">0</b><span>Total</span></div>
+        <div class="stat"><b id="sWeek">0</b><span>Last 7 days</span></div>
+        <div class="stat"><b id="sCompanies">0</b><span>Companies</span></div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="Search name, email, company or designation" aria-label="Search sign-ups">
+      <button type="button" id="refresh" class="ghost">Refresh</button>
+      <button type="button" id="csv">Export CSV</button>
+      <button type="button" id="logout" class="ghost">Sign out</button>
+    </div>
+    <p class="err" id="appErr"></p>
+
+    <div class="table-box">
+      <table>
+        <thead>
+          <tr>
+            <th data-k="created_at" aria-sort="descending">Signed up</th>
+            <th data-k="name">Name</th>
+            <th data-k="email">Email</th>
+            <th data-k="designation">Designation</th>
+            <th data-k="company">Company</th>
+            <th data-k="phone">Phone</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty" id="empty" hidden></div>
+    </div>
+    <p class="note" id="showing"></p>
+  </main>
+
+<script>
+(function () {
+  var KEY = "screvo-beta-admin-token";
+  var all = [];
+  var sortKey = "created_at", sortDir = -1;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function getToken() { try { return sessionStorage.getItem(KEY) || ""; } catch (e) { return ""; } }
+  function setToken(t) { try { t ? sessionStorage.setItem(KEY, t) : sessionStorage.removeItem(KEY); } catch (e) {} }
+
+  function showLogin(msg) {
+    $("app").hidden = true;
+    $("login").hidden = false;
+    $("loginErr").textContent = msg || "";
+    $("token").focus();
+  }
+
+  function load(token) {
+    return fetch("/api/beta-admin", { headers: { authorization: "Bearer " + token }, cache: "no-store" })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (b) { return { status: r.status, b: b }; });
+      });
+  }
+
+  function fmtDate(iso) {
+    var d = new Date(iso);
+    return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) + ", " +
+      d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function td(cls, text) {
+    var c = document.createElement("td");
+    if (cls) c.className = cls;
+    if (text) c.textContent = text;
+    else { var s = document.createElement("span"); s.className = "nil"; s.textContent = "—"; c.appendChild(s); }
+    return c;
+  }
+
+  function filtered() {
+    var q = $("q").value.trim().toLowerCase();
+    var list = !q ? all.slice() : all.filter(function (r) {
+      return [r.name, r.email, r.company, r.designation, r.phone || ""].join(" ").toLowerCase().indexOf(q) !== -1;
+    });
+    list.sort(function (a, b) {
+      var x = (a[sortKey] || "").toString().toLowerCase(), y = (b[sortKey] || "").toString().toLowerCase();
+      return x < y ? -sortDir : x > y ? sortDir : 0;
+    });
+    return list;
+  }
+
+  function render() {
+    var weekAgo = Date.now() - 7 * 864e5;
+    $("sTotal").textContent = all.length;
+    $("sWeek").textContent = all.filter(function (r) { return new Date(r.created_at).getTime() >= weekAgo; }).length;
+    $("sCompanies").textContent = new Set(all.map(function (r) { return r.company.trim().toLowerCase(); })).size;
+
+    var list = filtered();
+    var body = $("rows");
+    body.textContent = "";
+    list.forEach(function (r) {
+      var tr = document.createElement("tr");
+      tr.appendChild(td("when", fmtDate(r.created_at)));
+      tr.appendChild(td("", r.name));
+      tr.appendChild(td("email", r.email));
+      tr.appendChild(td("", r.designation));
+      tr.appendChild(td("", r.company));
+      tr.appendChild(td("phone", r.phone));
+      body.appendChild(tr);
+    });
+    $("empty").hidden = list.length > 0;
+    $("empty").textContent = all.length ? "No sign-ups match that search." : "No one has signed up yet. Share /beta to get your first testers.";
+    $("showing").textContent = all.length ? "Showing " + list.length + " of " + all.length + " sign-ups." : "";
+    $("csv").disabled = list.length === 0;
+  }
+
+  function enter(token, btn) {
+    if (btn) btn.disabled = true;
+    $("appErr").textContent = "";
+    return load(token).then(function (res) {
+      if (res.status === 401 || res.status === 503) { setToken(""); showLogin(res.b.error); return; }
+      if (!res.b.signups) { $("appErr").textContent = res.b.error || "Couldn't load sign-ups. Try Refresh."; return; }
+      setToken(token);
+      all = res.b.signups;
+      $("login").hidden = true;
+      $("app").hidden = false;
+      render();
+    }).catch(function () {
+      var msg = "Couldn't reach the server. Check your connection and try again.";
+      if ($("app").hidden) $("loginErr").textContent = msg; else $("appErr").textContent = msg;
+    }).then(function () { if (btn) btn.disabled = false; });
+  }
+
+  $("login").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var t = $("token").value.trim();
+    if (!t) { $("loginErr").textContent = "Enter the admin password."; return; }
+    enter(t, $("loginBtn"));
+  });
+  $("refresh").addEventListener("click", function () { enter(getToken(), this); });
+  $("logout").addEventListener("click", function () { setToken(""); all = []; $("token").value = ""; showLogin(""); });
+  $("q").addEventListener("input", render);
+
+  document.querySelectorAll("th[data-k]").forEach(function (th) {
+    th.addEventListener("click", function () {
+      var k = th.dataset.k;
+      sortDir = k === sortKey ? -sortDir : (k === "created_at" ? -1 : 1);
+      sortKey = k;
+      document.querySelectorAll("th[data-k]").forEach(function (h) { h.removeAttribute("aria-sort"); });
+      th.setAttribute("aria-sort", sortDir === 1 ? "ascending" : "descending");
+      render();
+    });
+  });
+
+  $("csv").addEventListener("click", function () {
+    var cols = ["created_at", "name", "email", "designation", "company", "phone"];
+    var esc = function (v) {
+      var s = v == null ? "" : String(v);
+      if (/^[=+\-@]/.test(s)) s = "'" + s; // keep spreadsheets from running cell formulas
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    var lines = [cols.join(",")].concat(filtered().map(function (r) { return cols.map(function (c) { return esc(r[c]); }).join(","); }));
+    var blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "screvo-beta-signups-" + new Date().toISOString().slice(0, 10) + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  });
+
+  var saved = getToken();
+  if (saved) enter(saved); else showLogin("");
+})();
+</script>
+</body>
+</html>
