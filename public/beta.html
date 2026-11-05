@@ -77,11 +77,22 @@
   h1 em { font-style: normal; color: var(--brand-hi); }
   .lede { color: var(--soft); font-size: 18px; max-width: 34em; margin: 0; }
 
-  .perks { list-style: none; padding: 0; margin: 36px 0 0; display: grid; gap: 18px; max-width: 34em; }
-  .perks li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 14px; }
-  .perks svg { margin-top: 3px; }
-  .perks b { display: block; font-weight: 600; color: var(--fg); }
-  .perks span { color: var(--muted); font-size: 15px; }
+  .perks {
+    list-style: none; padding: 0;
+    max-width: 1080px; margin: clamp(40px, 6vw, 64px) auto 0;
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;
+  }
+  @media (max-width: 760px) { .perks { grid-template-columns: minmax(0, 1fr); } }
+  .perk {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 22px;
+    display: grid; gap: 8px; align-content: start;
+  }
+  .perk svg { margin-bottom: 6px; }
+  .perk b { font: 700 19px/1.25 var(--display); letter-spacing: -0.01em; color: var(--fg); text-wrap: balance; }
+  .perk span { color: var(--muted); font-size: 15px; }
 
   .card {
     background: var(--surface);
@@ -155,48 +166,22 @@
       <span class="eyebrow">Private beta</span>
       <h1>Record your screen. Get a <em>finished demo.</em></h1>
       <p class="lede">Screvo finds the steps in a screen recording, writes and speaks the narration, and cuts it into a polished 9:16 product demo, tutorial or SOP. We're opening the app to a small group of early testers.</p>
-      <ul class="perks">
-        <li>
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="9" stroke="#3FD1CC" stroke-width="1.6"/><path d="M6 10.2l2.6 2.6L14 7.4" stroke="#3FD1CC" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <div><b>Early builds on Android and iOS</b><span>Install new versions before they ship to everyone.</span></div>
-        </li>
-        <li>
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="9" stroke="#3FD1CC" stroke-width="1.6"/><path d="M6 10.2l2.6 2.6L14 7.4" stroke="#3FD1CC" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <div><b>A direct line to the team</b><span>Your feedback decides what we build next.</span></div>
-        </li>
-        <li>
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="9" stroke="#3FD1CC" stroke-width="1.6"/><path d="M6 10.2l2.6 2.6L14 7.4" stroke="#3FD1CC" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <div><b>Free for the whole beta</b><span>Every feature, no card required.</span></div>
-        </li>
-      </ul>
     </section>
 
     <section class="card" aria-live="polite">
       <div id="formView">
         <h2>Join the beta</h2>
-        <p class="sub">Tell us a little about you. It takes 30 seconds.</p>
+        <p class="sub">Your email is all we need. We'll send your invite there.</p>
         <form id="signup" novalidate>
-          <div class="field" data-f="name">
-            <label for="name">Full name</label>
-            <input id="name" name="name" autocomplete="name" placeholder="Priya Sharma" maxlength="120" required>
-            <div class="err"></div>
-          </div>
           <div class="field" data-f="email">
-            <label for="email">Work email</label>
-            <input id="email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="priya@company.com" maxlength="254" required>
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" maxlength="254" required>
             <div class="err"></div>
           </div>
-          <div class="row">
-            <div class="field" data-f="designation">
-              <label for="designation">Designation</label>
-              <input id="designation" name="designation" autocomplete="organization-title" placeholder="Product Manager" maxlength="120" required>
-              <div class="err"></div>
-            </div>
-            <div class="field" data-f="company">
-              <label for="company">Company</label>
-              <input id="company" name="company" autocomplete="organization" placeholder="Acme Inc." maxlength="160" required>
-              <div class="err"></div>
-            </div>
+          <div class="field" data-f="name">
+            <label for="name">Name <span class="opt">(optional)</span></label>
+            <input id="name" name="name" autocomplete="name" placeholder="Priya Sharma" maxlength="120">
+            <div class="err"></div>
           </div>
           <div class="field" data-f="phone">
             <label for="phone">Phone number <span class="opt">(optional)</span></label>
@@ -221,6 +206,25 @@
       </div>
     </section>
   </main>
+
+  <ul class="perks" aria-label="Why Screvo">
+    <li class="perk">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" stroke="#3FD1CC" stroke-width="1.7" stroke-linejoin="round"/><path d="M18.5 16l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z" fill="#3FD1CC"/></svg>
+      <b>AI editing, voiceovers, and documentation</b>
+      <span>Screvo finds the steps, writes the script and narrates it for you.</span>
+    </li>
+    <li class="perk">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="6.5" cy="6.5" r="3" stroke="#3FD1CC" stroke-width="1.7"/><circle cx="6.5" cy="17.5" r="3" stroke="#3FD1CC" stroke-width="1.7"/><path d="M9 8.5L20 18M9 15.5L20 6" stroke="#3FD1CC" stroke-width="1.7" stroke-linecap="round"/></svg>
+      <b>Less reliance on editors</b>
+      <span>Go from raw recording to a finished cut without waiting on a video team.</span>
+    </li>
+    <li class="perk">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="13" r="8" stroke="#3FD1CC" stroke-width="1.7"/><path d="M12 9v4l2.5 2.5M10 2.5h4" stroke="#3FD1CC" stroke-width="1.7" stroke-linecap="round"/></svg>
+      <b>Get your video in minutes</b>
+      <span>Record your screen and get back a polished 9:16 video, ready to share.</span>
+    </li>
+  </ul>
+
   <footer>© Screvo</footer>
 
 <script>
@@ -241,10 +245,7 @@
 
   function check(v) {
     var e = {};
-    if (!v.name) e.name = "Enter your name.";
-    if (!EMAIL_RE.test(v.email)) e.email = "Enter a valid email address, like you@company.com.";
-    if (!v.designation) e.designation = "Enter your designation.";
-    if (!v.company) e.company = "Enter your company name.";
+    if (!EMAIL_RE.test(v.email)) e.email = v.email ? "Enter a valid email address, like you@example.com." : "Enter your email address.";
     if (v.phone && !PHONE_RE.test(v.phone)) e.phone = "Use digits only, with an optional + and country code.";
     return e;
   }
@@ -258,11 +259,11 @@
     ev.preventDefault();
     formErr.textContent = "";
     var v = {};
-    ["name", "email", "designation", "company", "phone", "website"].forEach(function (k) {
+    ["name", "email", "phone", "website"].forEach(function (k) {
       v[k] = form.elements[k].value.trim();
     });
     var errs = check(v);
-    ["name", "email", "designation", "company", "phone"].forEach(function (k) { setErr(k, errs[k]); });
+    ["name", "email", "phone"].forEach(function (k) { setErr(k, errs[k]); });
     var first = Object.keys(errs)[0];
     if (first) { form.elements[first].focus(); return; }
 
@@ -279,7 +280,7 @@
           document.getElementById("doneTitle").textContent = res.b.returning ? "Details updated" : "You're on the list";
           document.getElementById("doneMsg").textContent = res.b.returning
             ? "We already had " + v.email + " and have updated your details."
-            : "Thanks, " + v.name.split(" ")[0] + ". We've saved " + v.email + " for the next beta wave.";
+            : (v.name ? "Thanks, " + v.name.split(" ")[0] + ". " : "Thanks! ") + "We've saved " + v.email + " for the next beta wave.";
           document.getElementById("formView").hidden = true;
           document.getElementById("doneView").hidden = false;
           return;

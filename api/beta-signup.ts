@@ -3,10 +3,8 @@
 import { neon } from "@neondatabase/serverless";
 
 type Signup = {
-  name: string;
   email: string;
-  designation: string;
-  company: string;
+  name: string | null;
   phone: string | null;
 };
 
@@ -29,19 +27,14 @@ function clean(v: unknown, max: number): string {
 function validate(raw: Record<string, unknown>): { data?: Signup; errors?: Record<string, string> } {
   const name = clean(raw.name, 120);
   const email = clean(raw.email, 254).toLowerCase();
-  const designation = clean(raw.designation, 120);
-  const company = clean(raw.company, 160);
   const phone = clean(raw.phone, 20);
 
   const errors: Record<string, string> = {};
-  if (!name) errors.name = "Enter your name.";
-  if (!EMAIL_RE.test(email)) errors.email = "Enter a valid email address, like you@company.com.";
-  if (!designation) errors.designation = "Enter your designation.";
-  if (!company) errors.company = "Enter your company name.";
+  if (!EMAIL_RE.test(email)) errors.email = email ? "Enter a valid email address, like you@example.com." : "Enter your email address.";
   if (phone && !PHONE_RE.test(phone)) errors.phone = "Use digits only, with an optional + and country code.";
 
   if (Object.keys(errors).length) return { errors };
-  return { data: { name, email, designation, company, phone: phone || null } };
+  return { data: { email, name: name || null, phone: phone || null } };
 }
 
 export async function POST(request: Request) {
@@ -62,33 +55,40 @@ export async function POST(request: Request) {
   if (!data) return json({ error: "Check the highlighted fields.", fields: errors }, 422);
 
   const sql = neon(url);
-  tableReady ??= sql`
-    CREATE TABLE IF NOT EXISTS beta_signups (
-      id          BIGSERIAL PRIMARY KEY,
-      name        TEXT NOT NULL,
-      email       TEXT NOT NULL UNIQUE,
-      designation TEXT NOT NULL,
-      company     TEXT NOT NULL,
-      phone       TEXT,
-      user_agent  TEXT,
-      created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-      updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-    )`.catch((e) => {
-    tableReady = null;
-    throw e;
-  });
+  // Only email is required. designation/company were asked for in the first
+  // version of the form; they stay as optional columns so older rows keep them.
+  tableReady ??= sql
+    .transaction([
+      sql`CREATE TABLE IF NOT EXISTS beta_signups (
+        id          BIGSERIAL PRIMARY KEY,
+        name        TEXT,
+        email       TEXT NOT NULL UNIQUE,
+        designation TEXT,
+        company     TEXT,
+        phone       TEXT,
+        user_agent  TEXT,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+      sql`ALTER TABLE beta_signups
+        ALTER COLUMN name DROP NOT NULL,
+        ALTER COLUMN designation DROP NOT NULL,
+        ALTER COLUMN company DROP NOT NULL`,
+    ])
+    .catch((e) => {
+      tableReady = null;
+      throw e;
+    });
 
   try {
     await tableReady;
     const ua = clean(request.headers.get("user-agent"), 300) || null;
     // Signing up twice with the same email updates the details instead of failing.
     const rows = await sql`
-      INSERT INTO beta_signups (name, email, designation, company, phone, user_agent)
-      VALUES (${data.name}, ${data.email}, ${data.designation}, ${data.company}, ${data.phone}, ${ua})
+      INSERT INTO beta_signups (email, name, phone, user_agent)
+      VALUES (${data.email}, ${data.name}, ${data.phone}, ${ua})
       ON CONFLICT (email) DO UPDATE SET
-        name = EXCLUDED.name,
-        designation = EXCLUDED.designation,
-        company = EXCLUDED.company,
+        name = COALESCE(EXCLUDED.name, beta_signups.name),
         phone = COALESCE(EXCLUDED.phone, beta_signups.phone),
         updated_at = now()
       RETURNING (xmax = 0) AS inserted`;

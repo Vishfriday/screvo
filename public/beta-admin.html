@@ -72,7 +72,7 @@
   button[disabled] { opacity: .55; cursor: default; }
 
   .table-box { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; min-width: 820px; }
+  table { width: 100%; border-collapse: collapse; min-width: 640px; }
   th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--surface-2); position: sticky; top: 0; cursor: pointer; user-select: none; white-space: nowrap; }
   th[aria-sort="ascending"]::after { content: " ↑"; color: var(--teal); }
@@ -117,12 +117,12 @@
       <div class="stats">
         <div class="stat"><b id="sTotal">0</b><span>Total</span></div>
         <div class="stat"><b id="sWeek">0</b><span>Last 7 days</span></div>
-        <div class="stat"><b id="sCompanies">0</b><span>Companies</span></div>
+        <div class="stat"><b id="sPhone">0</b><span>Shared a phone</span></div>
       </div>
     </div>
 
     <div class="toolbar">
-      <input id="q" type="search" placeholder="Search name, email, company or designation" aria-label="Search sign-ups">
+      <input id="q" type="search" placeholder="Search email, name or phone" aria-label="Search sign-ups">
       <button type="button" id="refresh" class="ghost">Refresh</button>
       <button type="button" id="csv">Export CSV</button>
       <button type="button" id="logout" class="ghost">Sign out</button>
@@ -134,10 +134,8 @@
         <thead>
           <tr>
             <th data-k="created_at" aria-sort="descending">Signed up</th>
-            <th data-k="name">Name</th>
             <th data-k="email">Email</th>
-            <th data-k="designation">Designation</th>
-            <th data-k="company">Company</th>
+            <th data-k="name">Name</th>
             <th data-k="phone">Phone</th>
           </tr>
         </thead>
@@ -189,7 +187,7 @@
   function filtered() {
     var q = $("q").value.trim().toLowerCase();
     var list = !q ? all.slice() : all.filter(function (r) {
-      return [r.name, r.email, r.company, r.designation, r.phone || ""].join(" ").toLowerCase().indexOf(q) !== -1;
+      return [r.email, r.name || "", r.phone || ""].join(" ").toLowerCase().indexOf(q) !== -1;
     });
     list.sort(function (a, b) {
       var x = (a[sortKey] || "").toString().toLowerCase(), y = (b[sortKey] || "").toString().toLowerCase();
@@ -202,7 +200,7 @@
     var weekAgo = Date.now() - 7 * 864e5;
     $("sTotal").textContent = all.length;
     $("sWeek").textContent = all.filter(function (r) { return new Date(r.created_at).getTime() >= weekAgo; }).length;
-    $("sCompanies").textContent = new Set(all.map(function (r) { return r.company.trim().toLowerCase(); })).size;
+    $("sPhone").textContent = all.filter(function (r) { return !!r.phone; }).length;
 
     var list = filtered();
     var body = $("rows");
@@ -210,10 +208,8 @@
     list.forEach(function (r) {
       var tr = document.createElement("tr");
       tr.appendChild(td("when", fmtDate(r.created_at)));
-      tr.appendChild(td("", r.name));
       tr.appendChild(td("email", r.email));
-      tr.appendChild(td("", r.designation));
-      tr.appendChild(td("", r.company));
+      tr.appendChild(td("", r.name));
       tr.appendChild(td("phone", r.phone));
       body.appendChild(tr);
     });
@@ -262,7 +258,7 @@
   });
 
   $("csv").addEventListener("click", function () {
-    var cols = ["created_at", "name", "email", "designation", "company", "phone"];
+    var cols = ["created_at", "email", "name", "phone"];
     var esc = function (v) {
       var s = v == null ? "" : String(v);
       if (/^[=+\-@]/.test(s)) s = "'" + s; // keep spreadsheets from running cell formulas

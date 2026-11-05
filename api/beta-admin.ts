@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   const sql = neon(url);
   try {
     const rows = await sql`
-      SELECT id, name, email, designation, company, phone, created_at, updated_at
+      SELECT id, email, name, phone, created_at, updated_at
       FROM beta_signups
       ORDER BY created_at DESC
       LIMIT 5000`;
